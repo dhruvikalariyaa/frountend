@@ -506,6 +506,24 @@ const STORAGE_KEYS = {
   USER_ROLES: 'crm_user_roles'
 };
 
+// Helper function to convert permissions object to array
+const permissionsObjectToArray = (permissions: Record<string, any> | string[] | undefined): string[] => {
+  if (!permissions) return [];
+  if (Array.isArray(permissions)) return permissions;
+  if (typeof permissions === 'object') {
+    return Object.keys(permissions).filter(key => permissions[key] === true);
+  }
+  return [];
+};
+
+// Helper function to convert permissions array to object
+const permissionsArrayToObject = (permissions: string[]): Record<string, any> => {
+  return permissions.reduce((acc, permission) => {
+    acc[permission] = true;
+    return acc;
+  }, {} as Record<string, any>);
+};
+
 const loadFromStorage = (key: string) => {
   try {
     const item = localStorage.getItem(key);
@@ -566,7 +584,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const rolesWithIds = rolesArray.map((role: Role) => ({
             ...role,
             id: role.id || role._id,
-            _id: role._id || role.id
+            _id: role._id || role.id,
+            permissions: permissionsObjectToArray(role.permissions)
           }));
           
           console.log('Processed roles with IDs:', rolesWithIds);
@@ -579,6 +598,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     fetchRoles();
   }, [isAuthenticated]);
+
+  // Function to refresh roles from backend
+  const refreshRoles = async () => {
+    if (isAuthenticated) {
+      try {
+        const res = await roleService.getRoles();
+        console.log('Refreshed roles from backend:', res);
+        
+        const rolesArray = res.data.data || [];
+        const rolesWithIds = rolesArray.map((role: Role) => ({
+          ...role,
+          id: role.id || role._id,
+          _id: role._id || role.id,
+          permissions: permissionsObjectToArray(role.permissions)
+        }));
+        
+        console.log('Processed refreshed roles with IDs:', rolesWithIds);
+        setRoles(rolesWithIds);
+      } catch (err) {
+        console.error('Error refreshing roles:', err);
+      }
+    }
+  };
 
   // Update the hasPermission function to handle type safety
   const hasPermission = (permission: string): boolean => {
@@ -738,20 +780,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Create role using backend
   const createRole = async (role: Partial<Role>) => {
     try {
-      const newRole = await roleService.createRole(role);
-      console.log('Created new role:', newRole);
+      // Convert permissions array to the format expected by the backend
+      const roleData = {
+        ...role,
+        permissions: Array.isArray(role.permissions) 
+          ? permissionsArrayToObject(role.permissions)
+          : role.permissions
+      };
       
-      // Ensure the new role has proper ID fields
+      const newRole = await roleService.createRole(roleData);
+      console.log('Created new role:', newRole);
+      console.log('Original role name:', role.name);
+      console.log('Backend returned role name:', newRole.name);
+      
+      // Ensure the new role has proper ID fields and convert permissions back to array for frontend
       const roleWithIds = {
         ...newRole,
         id: newRole.id || newRole._id,
-        _id: newRole._id || newRole.id
+        _id: newRole._id || newRole.id,
+        permissions: permissionsObjectToArray(newRole.permissions)
       };
       
+      // Use the original role name if backend doesn't return it
+      const finalRoleName = roleWithIds.name || role.name;
+      console.log('Final role name for toast:', finalRoleName);
+      
       setRoles(prev => [...prev, roleWithIds]);
-      window.dispatchEvent(new CustomEvent('permissionsUpdated', {
-        detail: { roleName: roleWithIds.name, permissions: roleWithIds.permissions }
+      
+      // Refresh roles from backend to ensure consistency
+      await refreshRoles();
+      
+      // Dispatch custom event to notify UI about role creation
+      window.dispatchEvent(new CustomEvent('rolesUpdated', {
+        detail: { action: 'created', roleName: finalRoleName, roleId: roleWithIds.id }
       }));
+      
+      window.dispatchEvent(new CustomEvent('permissionsUpdated', {
+        detail: { roleName: finalRoleName, permissions: roleWithIds.permissions }
+      }));
+      
+      toast({
+        title: `✅ Role "${finalRoleName}" Created!`,
+        description: `The role has been successfully created and is now available in the system. You can now assign this role to users.`,
+        duration: 5000,
+        className: "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 text-black",
+      });
     } catch (err: any) {
       console.error('Failed to create role:', err);
       if (err?.response?.data?.message) {
@@ -771,6 +844,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           className: "bg-gradient-to-r from-red-50 to-rose-50 border-red-200 text-black",
         });
       }
+      // Re-throw the error so the calling component can handle it
+      throw err;
     }
   };
 
@@ -803,11 +878,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       
-      const updatedRole = await roleService.updateRole(roleId, { permissions });
-      setRoles(prev => prev.map(r => (r.id || r._id) === updatedRole.id ? updatedRole : r));
+      // Convert permissions array to the format expected by the backend
+      const permissionsObject = permissionsArrayToObject(permissions);
+      
+      const updatedRole = await roleService.updateRole(roleId, { permissions: permissionsObject });
+      
+      // Convert permissions back to array for frontend
+      const updatedRoleWithArrayPermissions = {
+        ...updatedRole,
+        permissions: permissionsObjectToArray(updatedRole.permissions)
+      };
+      
+      setRoles(prev => prev.map(r => (r.id || r._id) === updatedRole.id ? updatedRoleWithArrayPermissions : r));
+      
+      // Refresh roles from backend to ensure consistency
+      await refreshRoles();
       
       window.dispatchEvent(new CustomEvent('permissionsUpdated', {
-        detail: { roleName: updatedRole.name, permissions: updatedRole.permissions }
+        detail: { roleName: updatedRole.name, permissions: updatedRoleWithArrayPermissions.permissions }
       }));
       
       toast({
@@ -884,6 +972,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('Deleting role with ID:', roleId, 'Role object:', role);
       await roleService.deleteRole(roleId);
       setRoles(prev => prev.filter(r => (r.id || r._id) !== roleId));
+      
+      // Refresh roles from backend to ensure consistency
+      await refreshRoles();
       
       // Dispatch custom event to notify UI about role deletion
       window.dispatchEvent(new CustomEvent('rolesUpdated', {
