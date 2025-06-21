@@ -12,7 +12,7 @@ export default function Profile() {
   const { user } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [profileData, setProfileData] = useState({
-    name: user?.name || '',
+    name: user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.email || '',
     email: user?.email || '',
     phone: user?.phone || '',
     location: user?.location || '',

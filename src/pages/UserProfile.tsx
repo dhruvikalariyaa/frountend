@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +28,7 @@ export default function UserProfile() {
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [profileData, setProfileData] = useState({
-    name: user?.name || '',
+    name: user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.email || '',
     email: user?.email || '',
     phone: user?.phone || '',
     location: user?.location || '',

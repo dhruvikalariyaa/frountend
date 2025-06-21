@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,21 +13,17 @@ import {
 } from '@/components/ui/table';
 import {
   Shield,
-  UserPlus,
   Users,
   X,
   Plus,
   Pencil,
   Trash2,
-  Search,
-  AlertCircle,
-  UserCheck,
-  History,
-  AlertTriangle,
-  CheckCircle2,
-  XCircle,
-  Edit2,
   GitCompare,
+  History,
+  UserCheck,
+  UserPlus,
+  AlertTriangle,
+  Check
 } from 'lucide-react';
 import {
   Dialog,
@@ -39,30 +35,26 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PERMISSIONS } from '@/contexts/AuthContext';
-import { useAuth, MockUser } from '@/contexts/AuthContext';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth, MockUser } from '../../contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { COMPONENT_PERMISSIONS } from '@/constants/componentPermissions';
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Role } from '@/types/models';
+import { UserPermissions } from '@/services/permission.service';
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Role } from '@/types/models';
+import { cn } from '@/lib/utils';
 
 interface RoleTemplate {
   id: string;
   name: string;
   description: string;
-  permissions: string[];
+  permissions: UserPermissions;
   category: string;
 }
 
@@ -79,262 +71,156 @@ interface RoleHistory {
   user: string;
 }
 
-interface PermissionDependency {
-  permission: string;
-  requires: string[];
-}
-
-// Group permissions by category for display
-const permissionGroups: Record<string, { description: string; permissions: string[] }> = {
-  'Dashboard': {
-    description: 'Access to dashboard and analytics',
-    permissions: [
-      PERMISSIONS.VIEW_DASHBOARD
-    ]
+// Define permission groups based on the new API structure
+const permissionGroups = {
+  dashboard: {
+    description: 'Dashboard',
+    modules: {
+      dashboard: 'Dashboard Access'
+    }
   },
-  'Employee Management': {
-    description: 'Manage employees and their information',
-    permissions: [
-      PERMISSIONS.VIEW_EMPLOYEES,
-      // PERMISSIONS.MANAGE_EMPLOYEES,
-      // PERMISSIONS.VIEW_EMPLOYEE_DETAILS,
-      // PERMISSIONS.EDIT_EMPLOYEE_DETAILS,
-      // PERMISSIONS.DELETE_EMPLOYEE,
-      // PERMISSIONS.VIEW_DEPARTMENTS,
-      // PERMISSIONS.MANAGE_DEPARTMENTS,
-      // PERMISSIONS.VIEW_DEPARTMENT_DETAILS,
-      // PERMISSIONS.EDIT_DEPARTMENT_DETAILS,
-      // PERMISSIONS.DELETE_DEPARTMENT,
-      // PERMISSIONS.VIEW_ATTENDANCE,
-      // PERMISSIONS.MANAGE_ATTENDANCE,
-      // PERMISSIONS.VIEW_ATTENDANCE_DETAILS,
-      // PERMISSIONS.EDIT_ATTENDANCE,
-      // PERMISSIONS.DELETE_ATTENDANCE,
-      // PERMISSIONS.VIEW_PERFORMANCE,
-      // PERMISSIONS.MANAGE_PERFORMANCE,
-      // PERMISSIONS.VIEW_PERFORMANCE_DETAILS,
-      // PERMISSIONS.EDIT_PERFORMANCE,
-      // PERMISSIONS.DELETE_PERFORMANCE,
-      // PERMISSIONS.VIEW_LEAVE,
-      // PERMISSIONS.MANAGE_LEAVE,
-      // PERMISSIONS.VIEW_LEAVE_DETAILS,
-      // PERMISSIONS.APPROVE_LEAVE,
-      // PERMISSIONS.REJECT_LEAVE,
-      // PERMISSIONS.DELETE_LEAVE,
-    ]
+  hiring: {
+    description: 'Hiring Management',
+    modules: {
+      candidate: 'Candidate Management',
+      interview: 'Interview Management',
+      job: 'Job Management',
+      onboarding: 'Onboarding Management'
+    }
   },
-  'Hiring Management': {
-    description: 'Manage hiring process and candidates',
-    permissions: [
-      PERMISSIONS.VIEW_JOBS,
-      PERMISSIONS.MANAGE_JOBS,
-      PERMISSIONS.VIEW_JOB_DETAILS,
-      PERMISSIONS.EDIT_JOB_DETAILS,
-      PERMISSIONS.DELETE_JOB,
-      PERMISSIONS.VIEW_CANDIDATES,
-      PERMISSIONS.MANAGE_CANDIDATES,
-      PERMISSIONS.VIEW_CANDIDATE_DETAILS,
-      PERMISSIONS.EDIT_CANDIDATE_DETAILS,
-      PERMISSIONS.DELETE_CANDIDATE,
-      PERMISSIONS.VIEW_INTERVIEWS,
-      PERMISSIONS.MANAGE_INTERVIEWS,
-      PERMISSIONS.VIEW_INTERVIEW_DETAILS,
-      PERMISSIONS.EDIT_INTERVIEW,
-      PERMISSIONS.DELETE_INTERVIEW,
-      PERMISSIONS.VIEW_ONBOARDING,
-      PERMISSIONS.MANAGE_ONBOARDING,
-      PERMISSIONS.VIEW_ONBOARDING_DETAILS,
-      PERMISSIONS.EDIT_ONBOARDING_DETAILS,
-      PERMISSIONS.DELETE_ONBOARDING
-    ]
+  employeemanagement: {
+    description: 'Employee Management',
+    modules: {
+      employee: 'Employee Management',
+      department: 'Department Management',
+      leave: 'Leave Management',
+      attendence: 'Attendance Management',
+      performance: 'Performance Management'
+    }
   },
-  'Project Management': {
-    description: 'Manage projects and tasks',
-    permissions: [
-      PERMISSIONS.VIEW_PROJECTS,
-  //     PERMISSIONS.MANAGE_PROJECTS,
-  //     PERMISSIONS.VIEW_PROJECT_DETAILS,
-  //     PERMISSIONS.EDIT_PROJECT_DETAILS,
-  //     PERMISSIONS.DELETE_PROJECT,
-  //     PERMISSIONS.VIEW_TASKS,
-  //     PERMISSIONS.MANAGE_TASKS,
-  //     PERMISSIONS.VIEW_TASK_DETAILS,
-  //     PERMISSIONS.EDIT_TASK_DETAILS,
-  //     PERMISSIONS.DELETE_TASK,
-  //     PERMISSIONS.VIEW_SPRINT_DETAILS,
-  //     PERMISSIONS.EDIT_SPRINT_DETAILS,
-  //     PERMISSIONS.DELETE_SPRINT,
-  //     PERMISSIONS.VIEW_TIMELINE,
-  //     PERMISSIONS.EDIT_TIMELINE,
-  //     PERMISSIONS.VIEW_RESOURCES,
-  //     PERMISSIONS.ALLOCATE_RESOURCES,
-  //     PERMISSIONS.VIEW_DELIVERABLES,
-  //     PERMISSIONS.MANAGE_DELIVERABLES,
-  //   ]
-  // },
-  // 'Sales & Clients': {
-  //   description: 'Manage clients and sales',
-  //   permissions: [
-  //     PERMISSIONS.VIEW_CLIENTS,
-  //     PERMISSIONS.MANAGE_CLIENTS,
-  //     PERMISSIONS.VIEW_CLIENT_DETAILS,
-  //     PERMISSIONS.EDIT_CLIENT_DETAILS,
-  //     PERMISSIONS.DELETE_CLIENT,
-  //     PERMISSIONS.VIEW_PROPOSALS,
-  //     PERMISSIONS.MANAGE_PROPOSALS,
-  //     PERMISSIONS.VIEW_PROPOSAL_DETAILS,
-  //     PERMISSIONS.EDIT_PROPOSAL_DETAILS,
-  //     PERMISSIONS.DELETE_PROPOSAL,
-  //     PERMISSIONS.VIEW_CONTRACTS,
-  //     PERMISSIONS.MANAGE_CONTRACTS,
-  //     PERMISSIONS.VIEW_CONTRACT_DETAILS,
-  //     PERMISSIONS.EDIT_CONTRACT_DETAILS,
-  //     PERMISSIONS.DELETE_CONTRACT,
-  //     PERMISSIONS.VIEW_REVENUE_DETAILS,
-    ]
-  },
-  'Asset Management': {
-    description: 'Manage company assets',
-    permissions: [
-      PERMISSIONS.VIEW_ASSETS,
-      // PERMISSIONS.MANAGE_ASSETS,
-      // PERMISSIONS.VIEW_ASSET_DETAILS,
-      // PERMISSIONS.EDIT_ASSET_DETAILS,
-      // PERMISSIONS.DELETE_ASSET,
-      // PERMISSIONS.VIEW_LICENSES,
-      // PERMISSIONS.MANAGE_LICENSES,
-      // PERMISSIONS.VIEW_LICENSE_DETAILS,
-      // PERMISSIONS.EDIT_LICENSE_DETAILS,
-      // PERMISSIONS.DELETE_LICENSE,
-      // PERMISSIONS.VIEW_MAINTENANCE,
-      // PERMISSIONS.MANAGE_MAINTENANCE,
-      // PERMISSIONS.VIEW_MAINTENANCE_DETAILS,
-      // PERMISSIONS.SCHEDULE_MAINTENANCE,
-      // PERMISSIONS.EDIT_MAINTENANCE,
-      // PERMISSIONS.DELETE_MAINTENANCE,
-    ]
-  },
-  'Finance': {
-    description: 'Manage financial information',
-    permissions: [
-      PERMISSIONS.VIEW_INVOICES,
-      // PERMISSIONS.MANAGE_INVOICES,
-      // PERMISSIONS.VIEW_INVOICE_DETAILS,
-      // PERMISSIONS.EDIT_INVOICE_DETAILS,
-      // PERMISSIONS.DELETE_INVOICE,
-      // PERMISSIONS.VIEW_EXPENSES,
-      // PERMISSIONS.MANAGE_EXPENSES,
-      // PERMISSIONS.VIEW_EXPENSE_DETAILS,
-      // PERMISSIONS.EDIT_EXPENSE_DETAILS,
-      // PERMISSIONS.DELETE_EXPENSE,
-      // PERMISSIONS.VIEW_PAYROLL,
-      // PERMISSIONS.MANAGE_PAYROLL,
-      // PERMISSIONS.VIEW_PAYROLL_DETAILS,
-      // PERMISSIONS.PROCESS_PAYROLL,
-      // PERMISSIONS.EDIT_PAYROLL_DETAILS,
-      // PERMISSIONS.DELETE_PAYROLL,
-      // PERMISSIONS.VIEW_REPORTS,
-      // PERMISSIONS.MANAGE_REPORTS,
-      // PERMISSIONS.VIEW_REPORT_DETAILS,
-    ]
-  },
-  'Settings': {
-    description: 'Access to system settings',
-    permissions: [
-      PERMISSIONS.VIEW_SETTINGS,
-      PERMISSIONS.MANAGE_SETTINGS,
-      PERMISSIONS.VIEW_COMPANY_PROFILE,
-      PERMISSIONS.EDIT_COMPANY_PROFILE,
-      PERMISSIONS.MANAGE_ROLES,
-      PERMISSIONS.VIEW_SYSTEM_SETTINGS,
-      PERMISSIONS.EDIT_SYSTEM_SETTINGS,
-    ]
+  settings: {
+    description: 'Settings',
+    modules: {
+      companyprofile: 'Company Profile',
+      rolespermisions: 'Roles & Permissions',
+      systemsettings: 'System Settings',
+      rolesDetails: 'Role Details'
+    }
   }
 };
 
-// Add role templates
+// Role templates with the new permission structure
 const ROLE_TEMPLATES: RoleTemplate[] = [
   {
-    id: 'admin',
+    id: 'administrator',
     name: 'Administrator',
     description: 'Full system access with all permissions',
-    permissions: Object.values(PERMISSIONS),
+    permissions: {
+      dashboard: { dashboard: { view: true } },
+      hiring: {
+        candidate: { view: true, create: true, edit: true, delete: true },
+        interview: { view: true, create: true, edit: true, delete: true },
+        job: { view: true, create: true, edit: true, delete: true },
+        onboarding: { view: true, create: true, edit: true, delete: true }
+      },
+      employeemanagement: {
+        employee: { view: true, create: true, edit: true, delete: true },
+        department: { view: true, create: true, edit: true, delete: true },
+        leave: { view: true, create: true, edit: true, delete: true },
+        attendence: { view: true, create: true, edit: true, delete: true },
+        performance: { view: true, create: true, edit: true, delete: true }
+      },
+      settings: {
+        companyprofile: { view: true, create: true, edit: true, delete: true },
+        rolespermisions: { view: true, create: true, edit: true, delete: true },
+        systemsettings: { view: true, create: true, edit: true, delete: true },
+        rolesDetails: { view: true, edit: true }
+      }
+    },
     category: 'System'
   },
   {
     id: 'hr_manager',
     name: 'HR Manager',
     description: 'Complete HR management and oversight',
-    permissions: [
-      // Hiring Management only
-      PERMISSIONS.VIEW_JOBS,
-      PERMISSIONS.MANAGE_JOBS,
-      PERMISSIONS.VIEW_JOB_DETAILS,
-      PERMISSIONS.EDIT_JOB_DETAILS,
-      PERMISSIONS.DELETE_JOB,
-      PERMISSIONS.VIEW_CANDIDATES,
-      PERMISSIONS.MANAGE_CANDIDATES,
-      PERMISSIONS.VIEW_CANDIDATE_DETAILS,
-      PERMISSIONS.EDIT_CANDIDATE_DETAILS,
-      PERMISSIONS.DELETE_CANDIDATE,
-      PERMISSIONS.VIEW_INTERVIEWS,
-      PERMISSIONS.MANAGE_INTERVIEWS,
-      PERMISSIONS.VIEW_INTERVIEW_DETAILS,
-      PERMISSIONS.EDIT_INTERVIEW,
-      PERMISSIONS.DELETE_INTERVIEW,
-      PERMISSIONS.VIEW_ONBOARDING,
-      PERMISSIONS.MANAGE_ONBOARDING,
-      PERMISSIONS.VIEW_ONBOARDING_DETAILS,
-      PERMISSIONS.EDIT_ONBOARDING_DETAILS,
-      PERMISSIONS.DELETE_ONBOARDING
-    ],
+    permissions: {
+      dashboard: { dashboard: { view: true } },
+      hiring: {
+        candidate: { view: true, create: true, edit: true, delete: true },
+        interview: { view: true, create: true, edit: true, delete: true },
+        job: { view: true, create: true, edit: true, delete: true },
+        onboarding: { view: true, create: true, edit: true, delete: true }
+      },
+      employeemanagement: {
+        employee: { view: true, create: true, edit: true, delete: false },
+        department: { view: true, create: false, edit: false, delete: false },
+        leave: { view: true, create: false, edit: true, delete: false },
+        attendence: { view: true, create: false, edit: false, delete: false },
+        performance: { view: true, create: false, edit: true, delete: false }
+      },
+      settings: {
+        companyprofile: { view: true, create: false, edit: false, delete: false },
+        rolespermisions: { view: false, create: false, edit: false, delete: false },
+        systemsettings: { view: false, create: false, edit: false, delete: false },
+        rolesDetails: { view: false, edit: false }
+      }
+    },
     category: 'HR'
-  },
-  {
-    id: 'manager',
-    name: 'Manager',
-    description: 'Department management and oversight',
-    permissions: [
-      PERMISSIONS.VIEW_EMPLOYEES,
-      PERMISSIONS.VIEW_EMPLOYEE_DETAILS,
-      PERMISSIONS.VIEW_DEPARTMENTS,
-      PERMISSIONS.VIEW_DEPARTMENT_DETAILS,
-      PERMISSIONS.VIEW_PROJECTS,
-      PERMISSIONS.VIEW_PROJECT_DETAILS,
-      PERMISSIONS.VIEW_TASKS,
-      PERMISSIONS.VIEW_TASK_DETAILS,
-    ],
-    category: 'Management'
   },
   {
     id: 'employee',
     name: 'Employee',
     description: 'Basic employee access',
-    permissions: [
-      PERMISSIONS.VIEW_DASHBOARD,
-      PERMISSIONS.VIEW_EMPLOYEE_DETAILS,
-      PERMISSIONS.VIEW_TASKS,
-      PERMISSIONS.VIEW_TASK_DETAILS,
-    ],
+    permissions: {
+      dashboard: { dashboard: { view: true } },
+      hiring: {
+        candidate: { view: false, create: false, edit: false, delete: false },
+        interview: { view: false, create: false, edit: false, delete: false },
+        job: { view: true, create: false, edit: false, delete: false },
+        onboarding: { view: false, create: false, edit: false, delete: false }
+      },
+      employeemanagement: {
+        employee: { view: false, create: false, edit: false, delete: false },
+        department: { view: true, create: false, edit: false, delete: false },
+        leave: { view: true, create: true, edit: false, delete: false },
+        attendence: { view: true, create: false, edit: false, delete: false },
+        performance: { view: true, create: false, edit: false, delete: false }
+      },
+      settings: {
+        companyprofile: { view: true, create: false, edit: false, delete: false },
+        rolespermisions: { view: false, create: false, edit: false, delete: false },
+        systemsettings: { view: false, create: false, edit: false, delete: false },
+        rolesDetails: { view: false, edit: false }
+      }
+    },
     category: 'Basic'
   }
 ];
 
-// Add permission dependencies
-const PERMISSION_DEPENDENCIES: PermissionDependency[] = [
-  {
-    permission: PERMISSIONS.MANAGE_EMPLOYEES,
-    requires: [PERMISSIONS.VIEW_EMPLOYEES]
+const ALL_POSSIBLE_PERMISSIONS: UserPermissions = {
+  dashboard: {
+    dashboard: { view: false }
   },
-  {
-    permission: PERMISSIONS.MANAGE_DEPARTMENTS,
-    requires: [PERMISSIONS.VIEW_DEPARTMENTS]
+  hiring: {
+    candidate: { view: false, create: false, edit: false, delete: false },
+    interview: { view: false, create: false, edit: false, delete: false },
+    job: { view: false, create: false, edit: false, delete: false },
+    onboarding: { view: false, create: false, edit: false, delete: false }
   },
-  {
-    permission: PERMISSIONS.MANAGE_PROJECTS,
-    requires: [PERMISSIONS.VIEW_PROJECTS]
+  employeemanagement: {
+    employee: { view: false, create: false, edit: false, delete: false },
+    department: { view: false, create: false, edit: false, delete: false },
+    leave: { view: false, create: false, edit: false, delete: false },
+    attendence: { view: false, create: false, edit: false, delete: false },
+    performance: { view: false, create: false, edit: false, delete: false }
+  },
+  settings: {
+    companyprofile: { view: false, create: false, edit: false, delete: false },
+    rolespermisions: { view: false, create: false, edit: false, delete: false },
+    systemsettings: { view: false, create: false, edit: false, delete: false },
+    rolesDetails: { view: false, edit: false }
   }
-];
+};
 
 // Custom hooks for better state management
 const useRoleManagement = () => {
@@ -347,11 +233,14 @@ const useRoleManagement = () => {
     assignRoleToUser, 
     unassignRoleFromUser,
     hasPermission,
-    users 
+    users,
+    user
   } = useAuth();
   
   const [newRoleName, setNewRoleName] = useState<string>('');
-  const [newRolePermissions, setNewRolePermissions] = useState<string[]>([]);
+  const [newRolePermissions, setNewRolePermissions] = useState<UserPermissions>(
+    JSON.parse(JSON.stringify(ALL_POSSIBLE_PERMISSIONS))
+  );
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [isAssignUserDialogOpen, setIsAssignUserDialogOpen] = useState<boolean>(false);
   const [roleToAssignUser, setRoleToAssignUser] = useState<Role | null>(null);
@@ -360,23 +249,28 @@ const useRoleManagement = () => {
   const [viewUsersRole, setViewUsersRole] = useState<Role | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [selectedTemplate, setSelectedTemplate] = useState<RoleTemplate | null>(null);
-  const [roleHistory, setRoleHistory] = useState<RoleHistory[]>([
-    {
-      id: '1',
-      roleName: 'Administrator',
-      action: 'created',
-      changes: [],
-      timestamp: new Date().toISOString(),
-      user: 'System'
-    }
-  ]);
+  const [roleHistory, setRoleHistory] = useState<RoleHistory[]>([]);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  const [showDependencies, setShowDependencies] = useState(false);
-  const [isComparing, setIsComparing] = useState(false);
-  const [rolesToCompare, setRolesToCompare] = useState<string[]>([]);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [roleToDelete, setRoleToDelete] = useState<string | null>(null);
-  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
+  const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
+  const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingRolePermissions, setEditingRolePermissions] = useState<UserPermissions | null>(null);
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
+  const [rolesToCompare, setRolesToCompare] = useState<Role[]>([]);
+
+  const userCountsByRole = useMemo(() => {
+    const counts: { [roleName: string]: number } = {};
+    roles.forEach(role => {
+      counts[role.name] = 0;
+    });
+    users.forEach(user => {
+      if (user.role && counts[user.role] !== undefined) {
+        counts[user.role]++;
+      }
+    });
+    return counts;
+  }, [users, roles]);
 
   return {
     roles,
@@ -388,6 +282,7 @@ const useRoleManagement = () => {
     unassignRoleFromUser,
     hasPermission,
     users,
+    user,
     newRoleName,
     setNewRoleName,
     newRolePermissions,
@@ -412,359 +307,81 @@ const useRoleManagement = () => {
     setRoleHistory,
     selectedRoles,
     setSelectedRoles,
-    showDependencies,
-    setShowDependencies,
-    isComparing,
-    setIsComparing,
-    rolesToCompare,
-    setRolesToCompare,
     isDeleteDialogOpen,
     setIsDeleteDialogOpen,
     roleToDelete,
     setRoleToDelete,
-    isBulkDeleteDialogOpen,
-    setIsBulkDeleteDialogOpen,
+    editingRole,
+    setEditingRole,
+    isEditModalOpen,
+    setIsEditModalOpen,
+    editingRolePermissions,
+    setEditingRolePermissions,
+    userCountsByRole,
+    isCompareModalOpen,
+    setIsCompareModalOpen,
+    rolesToCompare,
+    setRolesToCompare
   };
-};
-
-// Memoized components for better performance
-const RoleTable = React.memo(({ 
-  roles, 
-  users, 
-  onEdit, 
-  onDelete, 
-  onAssignUser, 
-  onViewUsers,
-  hasPermission,
-  roleSearchTerm,
-  selectedRoles,
-  onRoleSelect,
-  isLoading,
-  roleToDelete
-}: {
-  roles: Role[];
-  users: MockUser[];
-  onEdit: (role: Role) => void;
-  onDelete: (roleName: string) => void;
-  onAssignUser: (role: Role) => void;
-  onViewUsers: (role: Role) => void;
-  hasPermission: (permission: string) => boolean;
-  roleSearchTerm: string;
-  selectedRoles: string[];
-  onRoleSelect: (roleName: string) => void;
-  isLoading: boolean;
-  roleToDelete: string | null;
-}) => {
-  const filteredRoles = useMemo(() => 
-    roles.filter(role =>
-      (role.name?.toLowerCase() || '').includes(roleSearchTerm.toLowerCase()) ||
-      (role.description?.toLowerCase() || '').includes(roleSearchTerm.toLowerCase())
-    ),
-    [roles, roleSearchTerm]
-  );
-
-  // Check if a role is a system role
-  const isSystemRole = (roleName: string) => {
-    if (!roleName) return false;
-    const systemRoles = ['Administrator', 'Admin'];
-    return systemRoles.some(r => r.toLowerCase() === roleName.toLowerCase());
-  };
-
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Role Name</TableHead>
-          <TableHead>Description</TableHead>
-          <TableHead>Assigned Users</TableHead>
-          <TableHead>Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {filteredRoles.map(role => {
-          const assignedUsers = users.filter(user => user.role === role.name);
-          const isDeleting = isLoading && roleToDelete === role.name;
-          const isSystem = isSystemRole(role.name);
-          
-          return (
-            <TableRow key={role.id} className={`${isDeleting ? 'opacity-50' : ''} ${role.pending ? 'opacity-50' : ''}`}>
-              <TableCell className="font-medium">
-                <div className="flex items-center space-x-2">
-                  <Badge variant={isSystem ? "secondary" : "outline"}>
-                    {role.name}
-                    {isSystem && (
-                      <Shield className="w-3 h-3 ml-1" />
-                    )}
-                  </Badge>
-                  {isSystem && (
-                    <Badge variant="outline" className="text-xs">
-                      System
-                    </Badge>
-                  )}
-                  {isDeleting && (
-                    <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-900"></div>
-                      <span>Deleting...</span>
-                    </div>
-                  )}
-                  {role.pending && (
-                    <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-900"></div>
-                      <span>Creating...</span>
-                    </div>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell>
-                {role.description || (isSystem ? 'System Role' : 'Custom Role')}
-              </TableCell>
-              <TableCell>
-                <span className="font-semibold">{assignedUsers.length}</span>
-                {assignedUsers.length > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="ml-2"
-                    onClick={() => onViewUsers(role)}
-                    disabled={isDeleting || role.pending}
-                  >
-                    View Users
-                  </Button>
-                )}
-              </TableCell>
-              <TableCell className="flex items-center space-x-2">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onEdit(role)}
-                        disabled={!hasPermission(COMPONENT_PERMISSIONS.RolesPermissions) || isDeleting || role.pending}
-                      >
-                        <Pencil className="w-4 h-4 mr-2" /> Edit
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Edit role permissions</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button 
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => onDelete(role.name)}
-                        disabled={!hasPermission(COMPONENT_PERMISSIONS.RolesPermissions) || isLoading || role.pending || isSystem}
-                      >
-                        {isDeleting ? (
-                          <>
-                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-2"></div>
-                            Deleting...
-                          </>
-                        ) : (
-                          <>
-                            <Trash2 className="w-4 h-4 mr-2" /> Delete
-                          </>
-                        )}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{isSystem ? 'System roles cannot be deleted' : 'Delete role'}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button 
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onAssignUser(role)}
-                        disabled={!hasPermission(COMPONENT_PERMISSIONS.RolesPermissions) || isDeleting || role.pending}
-                      >
-                        <UserPlus className="w-4 h-4 mr-2" /> Add User
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Assign users to this role</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
-  );
-});
-
-RoleTable.displayName = 'RoleTable';
-
-// Helper function to ensure permissions are always an array
-const ensurePermissionsArray = (permissions: any): string[] => {
-  if (!permissions) return [];
-  if (Array.isArray(permissions)) return permissions;
-  if (typeof permissions === 'object') {
-    return Object.keys(permissions).filter(key => permissions[key] === true);
-  }
-  return [];
 };
 
 export default function RolesPermissions() {
   const { toast } = useToast();
   const {
     roles,
-    users,
     updateRole,
     createRole,
     deleteRole,
-    assignRoleToUser,
-    unassignRoleFromUser,
     hasPermission,
+    users,
     newRoleName,
     setNewRoleName,
     newRolePermissions,
     setNewRolePermissions,
-    selectedRole,
-    setSelectedRole,
-    isAssignUserDialogOpen,
-    setIsAssignUserDialogOpen,
-    roleToAssignUser,
-    setRoleToAssignUser,
-    userSearchTerm,
-    setUserSearchTerm,
     roleSearchTerm,
     setRoleSearchTerm,
-    viewUsersRole,
-    setViewUsersRole,
-    isLoading,
-    setIsLoading,
     selectedTemplate,
     setSelectedTemplate,
-    roleHistory,
-    setRoleHistory,
-    selectedRoles,
-    setSelectedRoles,
-    showDependencies,
-    setShowDependencies,
-    isComparing,
-    setIsComparing,
-    rolesToCompare,
-    setRolesToCompare,
     isDeleteDialogOpen,
     setIsDeleteDialogOpen,
     roleToDelete,
     setRoleToDelete,
-    isBulkDeleteDialogOpen,
-    setIsBulkDeleteDialogOpen,
+    roleHistory,
+    setRoleHistory,
+    editingRole,
+    setEditingRole,
+    isEditModalOpen,
+    setIsEditModalOpen,
+    editingRolePermissions,
+    setEditingRolePermissions,
+    userCountsByRole,
+    isAssignUserDialogOpen,
+    setIsAssignUserDialogOpen,
+    roleToAssignUser,
+    setRoleToAssignUser,
+    assignRoleToUser,
+    userSearchTerm,
+    setUserSearchTerm,
+    viewUsersRole,
+    setViewUsersRole,
+    unassignRoleFromUser,
+    isCompareModalOpen,
+    setIsCompareModalOpen,
+    rolesToCompare,
+    setRolesToCompare
   } = useRoleManagement();
+  const { user } = useAuth();
 
-  // Add effect to listen for roles updates
-  useEffect(() => {
-    const handleRolesUpdated = (event: CustomEvent) => {
-      const { action, roleName, roleId } = event.detail;
-      
-      if (action === 'deleted') {
-        // Clear any selected roles that were deleted
-        setSelectedRoles(prev => prev.filter(role => role !== roleName));
-        
-        // Clear selected role if it was deleted
-        if (selectedRole?.name === roleName) {
-          setSelectedRole(null);
-        }
-        
-        // Clear role to assign if it was deleted
-        if (roleToAssignUser?.name === roleName) {
-          setRoleToAssignUser(null);
-          setIsAssignUserDialogOpen(false);
-        }
-        
-        // Clear view users role if it was deleted
-        if (viewUsersRole?.name === roleName) {
-          setViewUsersRole(null);
-        }
-        
-        // Clear role to delete if it was deleted
-        if (roleToDelete === roleName) {
-          setRoleToDelete(null);
-          setIsDeleteDialogOpen(false);
-        }
-      }
-    };
-
-    window.addEventListener('rolesUpdated', handleRolesUpdated as EventListener);
-    return () => {
-      window.removeEventListener('rolesUpdated', handleRolesUpdated as EventListener);
-    };
-  }, [selectedRole, roleToAssignUser, viewUsersRole, roleToDelete]);
-
-  const handlePermissionChange = useCallback((roleName: string, permission: string, checked: boolean) => {
-    if (!hasPermission(COMPONENT_PERMISSIONS.RolesPermissions)) {
-      toast({
-        title: "Access Denied",
-        description: "You don't have permission to edit role permissions.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const role = roles.find(r => r.name === roleName);
-    if (!role) return;
-
-    const rolePermissions = ensurePermissionsArray(role.permissions);
-    const updatedPermissions = checked
-      ? [...rolePermissions, permission]
-      : rolePermissions.filter(p => p !== permission);
-
-    updateRole(roleName, updatedPermissions);
-    
-    // Add to history
-    setRoleHistory(prev => [
-      {
-        id: Date.now().toString(),
-        roleName: roleName,
-        action: 'updated',
-        changes: [
-          {
-            field: 'permissions',
-            oldValue: rolePermissions,
-            newValue: updatedPermissions
-          }
-        ],
-        timestamp: new Date().toISOString(),
-        user: 'Current User' // Replace with actual user name
-      },
-      ...prev
-    ]);
-    
-    toast({
-      title: "Success",
-      description: `Permissions updated for ${roleName} role.`,
-    });
-  }, [hasPermission, roles, toast, updateRole]);
-
-  const handleNewRolePermissionChange = useCallback((permission: string, checked: boolean) => {
-    if (!hasPermission(COMPONENT_PERMISSIONS.RolesPermissions)) {
-      toast({
-        title: "Access Denied",
-        description: "You don't have permission to create new roles.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setNewRolePermissions(prev =>
-      checked ? [...prev, permission] : prev.filter(p => p !== permission)
+  // Filter roles based on search term
+  const filteredRoles = useMemo(() => {
+    return roles.filter((role: Role) =>
+      role.name.toLowerCase().includes(roleSearchTerm.toLowerCase()) ||
+      (role.description && role.description.toLowerCase().includes(roleSearchTerm.toLowerCase()))
     );
-  }, [hasPermission, toast]);
+  }, [roles, roleSearchTerm]);
 
-  const handleCreateRole = useCallback(async () => {
+  // Handle permission change for new role
+  const handleNewRolePermissionChange = useCallback((module: string, submodule: string, action: string, checked: boolean) => {
     if (!hasPermission(COMPONENT_PERMISSIONS.RolesPermissions)) {
       toast({
         title: "Access Denied",
@@ -774,6 +391,77 @@ export default function RolesPermissions() {
       return;
     }
 
+    setNewRolePermissions(prev => {
+      const newPermissions = { ...prev };
+      if (!newPermissions[module as keyof UserPermissions]) {
+        // @ts-ignore
+        newPermissions[module as keyof UserPermissions] = {};
+      }
+       // @ts-ignore
+      if (!newPermissions[module as keyof UserPermissions][submodule]) {
+         // @ts-ignore
+        newPermissions[module as keyof UserPermissions][submodule] = {};
+      }
+       // @ts-ignore
+      newPermissions[module as keyof UserPermissions][submodule][action] = checked;
+      return newPermissions;
+    });
+  }, [hasPermission, toast, setNewRolePermissions]);
+
+  const handleSelectAllModulePermissions = useCallback((module: string, shouldSelect: boolean) => {
+    setNewRolePermissions(prev => {
+      const newPermissions = { ...prev };
+      const modulePermissions = (newPermissions as any)[module];
+      if (modulePermissions) {
+        Object.keys(modulePermissions).forEach(submodule => {
+          Object.keys(modulePermissions[submodule]).forEach(action => {
+            modulePermissions[submodule][action] = shouldSelect;
+          });
+        });
+      }
+      return newPermissions;
+    });
+  }, [setNewRolePermissions]);
+
+  const areAllModulePermissionsSelected = (moduleKey: string): boolean => {
+    const modulePermissions = (newRolePermissions as any)[moduleKey];
+    if (!modulePermissions) return false;
+
+    const submodules = Object.values(modulePermissions) as { [action: string]: boolean }[];
+    if (submodules.length === 0) return true; // No permissions to select, so it's "all selected"
+
+    return submodules.every(submodule => 
+      Object.values(submodule).every(permission => permission === true)
+    );
+  };
+
+  const countTotalPermissionsInGroup = (modulePermissions: any): number => {
+    if (!modulePermissions) return 0;
+    return Object.values(modulePermissions).reduce((count: number, submodule: any) => {
+        return count + Object.keys(submodule).length;
+    }, 0);
+  };
+
+  const countAssignedPermissions = (modulePermissions: any): number => {
+    if (!modulePermissions) return 0;
+    return Object.values(modulePermissions).reduce((count: number, submodule: any) => {
+        return count + Object.values(submodule).filter(value => value === true).length;
+    }, 0);
+  };
+
+  // Handle template selection
+  const handleTemplateSelect = useCallback((template: RoleTemplate) => {
+    setSelectedTemplate(template);
+    setNewRolePermissions(template.permissions);
+    setNewRoleName(template.name);
+      toast({
+      title: "Template Applied!",
+      description: `The "${template.name}" template is ready to be customized.`,
+      });
+  }, [setNewRoleName, setNewRolePermissions, setSelectedTemplate, toast]);
+
+  // Handle role creation
+  const handleCreateRole = useCallback(async () => {
     if (!newRoleName.trim()) {
       toast({
         title: "Error",
@@ -783,1158 +471,763 @@ export default function RolesPermissions() {
       return;
     }
 
-    if (roles.some(role => role.name === newRoleName)) {
-      toast({
-        title: "Error",
-        description: "A role with this name already exists.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsLoading(true);
     try {
-      console.log('Creating role with name:', newRoleName);
-      console.log('Creating role with permissions:', newRolePermissions);
-      
       await createRole({
         name: newRoleName,
-        permissions: newRolePermissions,
         description: `Custom role: ${newRoleName}`,
+        permissions: newRolePermissions
       });
 
-      console.log('Role creation completed successfully');
-
-      // Add to history
-      setRoleHistory(prev => [
-        {
-          id: Date.now().toString(),
+      const newHistoryEntry: RoleHistory = {
+        id: new Date().toISOString(),
           roleName: newRoleName,
           action: 'created',
           changes: [
-            {
-              field: 'permissions',
-              oldValue: [],
-              newValue: newRolePermissions
-            }
+          { field: 'name', oldValue: '', newValue: newRoleName },
+          { field: 'permissions', oldValue: {}, newValue: 'Initial permissions set' },
           ],
           timestamp: new Date().toISOString(),
-          user: 'Current User' // Replace with actual user name
-        },
-        ...prev
-      ]);
+        user: user?.email || 'System'
+      };
+      setRoleHistory(prev => [newHistoryEntry, ...prev]);
 
       setNewRoleName('');
-      setNewRolePermissions([]);
-      // Success toast is now handled by AuthContext
+      setNewRolePermissions(JSON.parse(JSON.stringify(ALL_POSSIBLE_PERMISSIONS)));
+      setSelectedTemplate(null);
     } catch (error) {
-      // Error toast is now handled by AuthContext
-    } finally {
-      setIsLoading(false);
+      console.error('Failed to create role:', error);
     }
-  }, [hasPermission, newRoleName, newRolePermissions, roles, toast, createRole]);
+  }, [newRoleName, newRolePermissions, createRole, toast, setSelectedTemplate, setNewRoleName, setNewRolePermissions, user, setRoleHistory]);
 
-  const handleDeleteRole = useCallback((roleName: string) => {
-    if (!hasPermission(COMPONENT_PERMISSIONS.RolesPermissions)) {
-      toast({
-        title: "Access Denied",
-        description: "You don't have permission to delete roles.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const usersWithRole = users.filter(user => user.role === roleName);
-    if (usersWithRole.length > 0) {
-      toast({
-        title: "Error",
-        description: "Cannot delete role that is assigned to users. Please unassign users first.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setRoleToDelete(roleName);
+  // Handle role deletion
+  const handleDeleteRole = useCallback(async (role: Role) => {
+    setRoleToDelete(role);
     setIsDeleteDialogOpen(true);
-  }, [hasPermission, users, toast]);
+  }, [setIsDeleteDialogOpen, setRoleToDelete]);
 
   const confirmDeleteRole = useCallback(async () => {
     if (!roleToDelete) return;
 
-    setIsLoading(true);
     try {
-      const roleToDeleteObj = roles.find(r => r.name === roleToDelete);
-      await deleteRole(roleToDelete);
-
-      // Add to history
-      if (roleToDeleteObj) {
-        setRoleHistory(prev => [
-          {
-            id: Date.now().toString(),
-            roleName: roleToDelete,
+      await deleteRole(roleToDelete.name);
+      
+      const newHistoryEntry: RoleHistory = {
+        id: new Date().toISOString(),
+        roleName: roleToDelete.name,
             action: 'deleted',
-            changes: [
-              {
-                field: 'permissions',
-                oldValue: ensurePermissionsArray(roleToDeleteObj.permissions),
-                newValue: []
-              }
-            ],
+        changes: [{ field: 'role', oldValue: roleToDelete.name, newValue: '' }],
             timestamp: new Date().toISOString(),
-            user: 'Current User'
-          },
-          ...prev
-        ]);
-      }
+        user: user?.email || 'System'
+      };
+      setRoleHistory(prev => [newHistoryEntry, ...prev]);
 
-      // Clear any UI state related to the deleted role
-      setSelectedRoles(prev => prev.filter(role => role !== roleToDelete));
-      if (selectedRole?.name === roleToDelete) {
-        setSelectedRole(null);
-      }
-      if (roleToAssignUser?.name === roleToDelete) {
-        setRoleToAssignUser(null);
-        setIsAssignUserDialogOpen(false);
-      }
-      if (viewUsersRole?.name === roleToDelete) {
-        setViewUsersRole(null);
-      }
-
-      // Success toast is now handled by AuthContext
-    } catch (error: any) {
-      console.error('Error deleting role:', error);
-      // Error toast is now handled by AuthContext
-    } finally {
-      setIsLoading(false);
       setIsDeleteDialogOpen(false);
       setRoleToDelete(null);
-    }
-  }, [roleToDelete, roles, deleteRole, selectedRole, roleToAssignUser, viewUsersRole]);
-
-  const handleBulkDelete = async () => {
-    if (!hasPermission(COMPONENT_PERMISSIONS.RolesPermissions)) {
-      toast({
-        title: "Access Denied",
-        description: "You don't have permission to delete roles.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsBulkDeleteDialogOpen(true);
-  };
-
-  const confirmBulkDelete = async () => {
-    try {
-      setIsLoading(true);
-      for (const roleName of selectedRoles) {
-        await deleteRole(roleName);
-      }
-      setSelectedRoles([]);
-      // Success toast is now handled by AuthContext for each individual role
     } catch (error) {
-      console.error('Error in bulk delete:', error);
-      // Error toast is now handled by AuthContext
-    } finally {
-      setIsLoading(false);
-      setIsBulkDeleteDialogOpen(false);
+      console.error('Failed to delete role:', error);
     }
+  }, [roleToDelete, deleteRole, setIsDeleteDialogOpen, setRoleToDelete, user, setRoleHistory]);
+
+  const handleEditRolePermissionChange = useCallback((module: string, submodule: string, action: string, checked: boolean) => {
+    setEditingRolePermissions(prev => {
+      if (!prev) return null;
+      const newPermissions = JSON.parse(JSON.stringify(prev)); // Deep copy
+      if (!newPermissions[module as keyof UserPermissions]) {
+        // @ts-ignore
+        newPermissions[module as keyof UserPermissions] = {};
+      }
+      // @ts-ignore
+      if (!newPermissions[module as keyof UserPermissions][submodule]) {
+        // @ts-ignore
+        newPermissions[module as keyof UserPermissions][submodule] = {};
+      }
+      // @ts-ignore
+      newPermissions[module as keyof UserPermissions][submodule][action] = checked;
+      return newPermissions;
+    });
+  }, [setEditingRolePermissions]);
+
+  const handleSelectAllEditingModulePermissions = useCallback((module: string, shouldSelect: boolean) => {
+    setEditingRolePermissions(prev => {
+      if (!prev) return null;
+      const newPermissions = JSON.parse(JSON.stringify(prev)); // Deep copy
+      const modulePermissions = (newPermissions as any)[module];
+      if (modulePermissions) {
+        Object.keys(modulePermissions).forEach(submodule => {
+          Object.keys(modulePermissions[submodule]).forEach(action => {
+            modulePermissions[submodule][action] = shouldSelect;
+          });
+        });
+      }
+      return newPermissions;
+    });
+  }, [setEditingRolePermissions]);
+
+  const areAllEditingModulePermissionsSelected = (moduleKey: string): boolean => {
+    if (!editingRolePermissions) return false;
+    const modulePermissions = (editingRolePermissions as any)[moduleKey];
+    if (!modulePermissions) return false;
+
+    const submodules = Object.values(modulePermissions) as { [action: string]: boolean }[];
+    if (submodules.length === 0) return true;
+
+    return submodules.every(submodule => 
+      Object.values(submodule).every(permission => permission === true)
+    );
   };
 
-  const handleOpenAssignUserDialog = useCallback((role: Role) => {
-    if (!hasPermission(COMPONENT_PERMISSIONS.RolesPermissions)) {
+  const handleEditClick = (role: Role) => {
+    const fullPermissions = JSON.parse(JSON.stringify(ALL_POSSIBLE_PERMISSIONS));
+    
+    // Deep merge the role's permissions into the full structure
+    const mergePermissions = (target: any, source: any) => {
+        for (const key in source) {
+            if (source.hasOwnProperty(key)) {
+                if (source[key] instanceof Object && target.hasOwnProperty(key)) {
+                    mergePermissions(target[key], source[key]);
+                } else {
+                    target[key] = source[key];
+                }
+            }
+        }
+    };
+
+    if (role.permissions) {
+        mergePermissions(fullPermissions, role.permissions);
+    }
+    
+    setEditingRole(role);
+    setEditingRolePermissions(fullPermissions);
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateRole = useCallback(async () => {
+    if (!editingRole || !editingRolePermissions) return;
+
+    try {
+      await updateRole(editingRole.name, editingRolePermissions);
+
+      const newHistoryEntry: RoleHistory = {
+        id: new Date().toISOString(),
+        roleName: editingRole.name,
+        action: 'updated',
+        changes: [{ field: 'permissions', oldValue: 'Previous permissions', newValue: 'New permissions set' }],
+        timestamp: new Date().toISOString(),
+        user: user?.email || 'System'
+      };
+      setRoleHistory(prev => [newHistoryEntry, ...prev]);
+
+      setIsEditModalOpen(false);
+      setEditingRole(null);
+      setEditingRolePermissions(null);
       toast({
-        title: "Access Denied",
-        description: "You don't have permission to assign users to roles.",
+        title: "Role Updated",
+        description: `Successfully updated the role: ${editingRole.name}`,
+      });
+    } catch (error) {
+      console.error('Failed to update role:', error);
+      toast({
+        title: "Update Failed",
+        description: "An error occurred while updating the role.",
         variant: "destructive",
       });
-      return;
     }
+  }, [editingRole, editingRolePermissions, updateRole, setRoleHistory, user, toast]);
 
-    setRoleToAssignUser({
-      ...role,
-      permissions: ensurePermissionsArray(role.permissions)
-    });
+  const handleAssignUserClick = (role: Role) => {
+    setRoleToAssignUser(role);
     setIsAssignUserDialogOpen(true);
     setUserSearchTerm('');
-  }, [hasPermission, toast]);
+  };
 
-  const handleAssignUser = useCallback((userId: string) => {
-    if (!hasPermission(COMPONENT_PERMISSIONS.RolesPermissions)) {
-      toast({
-        title: "Access Denied",
-        description: "You don't have permission to assign users to roles.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!roleToAssignUser) return;
-
-    setIsLoading(true);
-    try {
+  const handleAssignRoleToUser = (userId: string) => {
+    if (roleToAssignUser) {
       assignRoleToUser(userId, roleToAssignUser.name);
       toast({
-        title: "Success",
-        description: "User role has been updated successfully.",
+        title: "User Assigned",
+        description: `User has been successfully assigned the "${roleToAssignUser.name}" role.`,
       });
       setIsAssignUserDialogOpen(false);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to assign role to user. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
     }
-  }, [hasPermission, roleToAssignUser, toast, assignRoleToUser]);
+  };
 
-  const handleUnassignUser = useCallback((userId: string) => {
-    if (!hasPermission(COMPONENT_PERMISSIONS.RolesPermissions)) {
-      toast({
-        title: "Access Denied",
-        description: "You don't have permission to unassign users from roles.",
-        variant: "destructive",
-      });
-      return;
-    }
+  const handleViewUsersClick = (role: Role) => {
+    setViewUsersRole(role);
+  };
 
-    setIsLoading(true);
-    try {
+  const handleUnassignUser = (userId: string) => {
+    if (viewUsersRole) {
       unassignRoleFromUser(userId);
       toast({
-        title: "Success",
-        description: "User role has been unassigned successfully.",
+        title: "User Unassigned",
+        description: `User has been unassigned from the "${viewUsersRole.name}" role.`,
       });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to unassign role from user. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
     }
-  }, [hasPermission, toast, unassignRoleFromUser]);
-
-  const filteredUsers = useMemo(() => 
-    users.filter((user: MockUser) =>
-      user.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(userSearchTerm.toLowerCase())
-    ),
-    [users, userSearchTerm]
-  );
-
-  const handleTemplateSelect = (template: RoleTemplate) => {
-    setNewRoleName(template.name);
-    setNewRolePermissions(template.permissions);
-    setSelectedTemplate(template);
   };
 
-  const handleRoleCompare = (role1: string, role2: string) => {
-    setRolesToCompare([role1, role2]);
-    setIsComparing(true);
+  const handleUnassignAllUsers = () => {
+    if (viewUsersRole) {
+      users.forEach(u => {
+        if (u.role === viewUsersRole.name) {
+          unassignRoleFromUser(u.id);
+        }
+      });
+      toast({
+        title: "All Users Unassigned",
+        description: `All users have been unassigned from the "${viewUsersRole.name}" role.`,
+      });
+      setViewUsersRole(null);
+    }
   };
 
-  const checkPermissionDependencies = (permission: string, currentPermissions: string[]) => {
-    const dependency = PERMISSION_DEPENDENCIES.find(d => d.permission === permission);
-    if (!dependency) return true;
-    return dependency.requires.every(req => currentPermissions.includes(req));
+  const handleCompareRoleToggle = (role: Role) => {
+    setRolesToCompare(prev =>
+      prev.some(r => r.id === role.id)
+        ? prev.filter(r => r.id !== role.id)
+        : [...prev, role]
+    );
   };
+
+  const renderPermissionComparison = () => {
+    if (rolesToCompare.length < 2) return null;
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Permission</TableHead>
+            {rolesToCompare.map(role => <TableHead key={role.id}>{role.name}</TableHead>)}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {Object.entries(permissionGroups).map(([groupKey, group]) => (
+            <React.Fragment key={groupKey}>
+              <TableRow>
+                <TableCell colSpan={rolesToCompare.length + 1} className="font-semibold bg-gray-50">
+                  {group.description}
+                </TableCell>
+              </TableRow>
+              {Object.entries(group.modules).map(([moduleKey, moduleName]) =>
+                Object.keys((ALL_POSSIBLE_PERMISSIONS as any)[groupKey][moduleKey]).map(action => (
+                  <TableRow key={`${groupKey}-${moduleKey}-${action}`}>
+                    <TableCell className="pl-8">{`${moduleName} - ${action}`}</TableCell>
+                    {rolesToCompare.map(role => {
+                      const hasPermission = !!(role.permissions as any)?.[groupKey]?.[moduleKey]?.[action];
+                      return (
+                        <TableCell key={`${role.id}-${moduleKey}-${action}`} className="text-center">
+                          {hasPermission ? <Check className="h-5 w-5 text-green-500 mx-auto" /> : <X className="h-5 w-5 text-red-500 mx-auto" />}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                ))
+              )}
+            </React.Fragment>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
+  const statCards = [
+    { title: 'Total Roles', value: roles.length, icon: <Users className="h-6 w-6 text-blue-500" /> },
+    { title: 'Active Users', value: users.length, icon: <UserCheck className="h-6 w-6 text-green-500" /> },
+    { title: 'Permission Groups', value: Object.keys(permissionGroups).length, icon: <Shield className="h-6 w-6 text-purple-500" /> },
+    { title: 'Recent Changes', value: 3, icon: <History className="h-6 w-6 text-orange-500" /> }
+  ];
 
   return (
     <PermissionGuard requiredPermission={COMPONENT_PERMISSIONS.RolesPermissions}>
-      <div className="space-y-6 p-6 pb-16">
-        {/* Enhanced Header Section */}
-        <div className="flex flex-col space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <h1 className="text-3xl font-bold tracking-tight">Roles & Permissions</h1>
-              <p className="text-muted-foreground">
-                Manage user roles and their associated permissions
-              </p>
+      <div className="container mx-auto p-6 space-y-8">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Roles & Permissions</h1>
+            <p className="text-gray-600 mt-2">Manage user roles and their associated permissions</p>
             </div>
-            <div className="flex items-center space-x-2">
-              {isLoading && (
-                <div className="flex items-center space-x-2 bg-muted/50 px-4 py-2 rounded-lg">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-                  <span className="text-sm text-muted-foreground">Processing...</span>
-                </div>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (rolesToCompare.length === 2) {
-                    handleRoleCompare(rolesToCompare[0], rolesToCompare[1]);
-                  }
-                }}
-                className="h-10 rounded-lg"
-              >
-                <GitCompare className="mr-2 h-4 w-4" />
+          <Button variant="outline" className="flex items-center gap-2" onClick={() => setIsCompareModalOpen(true)}>
+            <GitCompare className="h-4 w-4" />
                 Compare Roles
               </Button>
-            </div>
           </div>
 
-          {/* Enhanced Stats Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="hover:shadow-md transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-blue-100 rounded-lg">
-                    <Users className="h-6 w-6 text-blue-600" />
-                  </div>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {statCards.map(card => (
+            <Card key={card.title}>
+              <CardContent className="flex items-center justify-between p-6">
                   <div>
-                    <div className="text-sm font-medium text-muted-foreground">Total Roles</div>
-                    <div className="text-2xl font-bold">{roles.length}</div>
+                  <p className="text-sm font-medium text-gray-500">{card.title}</p>
+                  <p className="text-3xl font-bold text-gray-800">{card.value}</p>
                   </div>
+                <div className="p-3 bg-gray-100 rounded-lg">
+                  {card.icon}
                 </div>
               </CardContent>
             </Card>
-            <Card className="hover:shadow-md transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-green-100 rounded-lg">
-                    <UserCheck className="h-6 w-6 text-green-600" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium text-muted-foreground">Active Users</div>
-                    <div className="text-2xl font-bold">{users.length}</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="hover:shadow-md transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-purple-100 rounded-lg">
-                    <Shield className="h-6 w-6 text-purple-600" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium text-muted-foreground">Permission Groups</div>
-                    <div className="text-2xl font-bold">{Object.keys(permissionGroups).length}</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="hover:shadow-md transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-orange-100 rounded-lg">
-                    <History className="h-6 w-6 text-orange-600" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium text-muted-foreground">Recent Changes</div>
-                    <div className="text-2xl font-bold">{roleHistory.length}</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          ))}
           </div>
 
-          {/* Quick Actions */}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowDependencies(!showDependencies)}
-              className="h-9"
-            >
-              <AlertTriangle className="mr-2 h-4 w-4" />
-              {showDependencies ? 'Hide Dependencies' : 'Show Dependencies'}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSelectedTemplate(null)}
-              className="h-9"
-            >
-              <X className="mr-2 h-4 w-4" />
-              Clear Template
-            </Button>
-            {selectedRoles.length > 0 && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleBulkDelete}
-                className="h-9"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete Selected ({selectedRoles.length})
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Main Content Tabs */}
-        <Tabs defaultValue="roles" className="space-y-4">
+        <Tabs defaultValue="roles" className="w-full">
           <TabsList>
-            <TabsTrigger value="roles" className="flex items-center">
-              <Users className="mr-2 h-4 w-4" />
-              Roles
-            </TabsTrigger>
-            <TabsTrigger value="create" className="flex items-center">
-              <UserPlus className="mr-2 h-4 w-4" />
-              Create Role
-            </TabsTrigger>
-            <TabsTrigger value="history" className="flex items-center">
-              <History className="mr-2 h-4 w-4" />
-              History
-            </TabsTrigger>
+            <TabsTrigger value="roles" className="flex items-center gap-2"><Users className="h-4 w-4" />Roles</TabsTrigger>
+            <TabsTrigger value="create" className="flex items-center gap-2"><Plus className="h-4 w-4" />Create Role</TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-2"><History className="h-4 w-4" />History</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="roles" className="space-y-4">
-            {/* Existing Roles Card */}
+          <TabsContent value="roles" className="mt-6">
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex justify-between items-center">
                   <div>
-                    <CardTitle className="flex items-center text-xl">
-                      <Users className="mr-2 h-5 w-5" /> Existing Roles
-                    </CardTitle>
+                    <CardTitle>Existing Roles</CardTitle>
                     <CardDescription>Manage permissions for existing roles</CardDescription>
                   </div>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <div className="w-1/3">
                     <Input
                       placeholder="Search roles..."
                       value={roleSearchTerm}
-                      onChange={e => setRoleSearchTerm(e.target.value)}
-                      className="w-64 pl-9 h-10 rounded-lg"
+                      onChange={(e) => setRoleSearchTerm(e.target.value)}
                     />
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="rounded-md border">
-                  <RoleTable
-                    roles={roles}
-                    users={users}
-                    onEdit={(role) => setSelectedRole({
-                      ...role,
-                      permissions: ensurePermissionsArray(role.permissions)
-                    })}
-                    onDelete={handleDeleteRole}
-                    onAssignUser={handleOpenAssignUserDialog}
-                    onViewUsers={(role) => setViewUsersRole({
-                      ...role,
-                      permissions: ensurePermissionsArray(role.permissions)
-                    })}
-                    hasPermission={hasPermission}
-                    roleSearchTerm={roleSearchTerm}
-                    selectedRoles={selectedRoles}
-                    onRoleSelect={(roleName) => {
-                      setSelectedRoles(prev =>
-                        prev.includes(roleName)
-                          ? prev.filter(r => r !== roleName)
-                          : [...prev, roleName]
-                      );
-                    }}
-                    isLoading={isLoading}
-                    roleToDelete={roleToDelete}
-                  />
-                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Role Name</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Assigned Users</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredRoles.map((role: Role) => (
+                      <TableRow key={role.id || role._id}>
+                        <TableCell><Badge variant="outline">{role.name}</Badge></TableCell>
+                        <TableCell>{role.description}</TableCell>
+                        <TableCell>
+                           <Button variant="link" className="p-0 h-auto" onClick={() => handleViewUsersClick(role)}>
+                            {userCountsByRole[role.name] || 0}
+                          </Button>
+                        </TableCell>
+                        <TableCell className="flex gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="flex items-center gap-1" 
+                            onClick={() => handleEditClick(role)}
+                            disabled={role.name.toLowerCase() === 'administrator'}
+                          >
+                              <Pencil className="h-3 w-3" /> Edit
+                          </Button>
+                          <Button 
+                            variant="destructive" 
+                            size="sm" 
+                            className="flex items-center gap-1" 
+                            onClick={() => handleDeleteRole(role)}
+                            disabled={role.name.toLowerCase() === 'administrator'}
+                          >
+                            <Trash2 className="h-3 w-3" /> Delete
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="flex items-center gap-1"
+                            onClick={() => handleAssignUserClick(role)}
+                          >
+                            <UserPlus className="h-3 w-3" /> Add User
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="create" className="space-y-4">
-            {/* Create Role Card */}
+          <TabsContent value="create" className="mt-6">
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center text-xl">
-                      <UserPlus className="mr-2 h-5 w-5" /> Create New Role
-                    </CardTitle>
+                    <CardTitle className="text-xl font-bold">Create New Role</CardTitle>
                     <CardDescription>Define a new role and assign its permissions</CardDescription>
-                  </div>
-                </div>
               </CardHeader>
-              <CardContent className="space-y-6">
+                <CardContent className="space-y-8">
                 {/* Role Templates */}
-                <div className="space-y-2">
-                  <Label className="text-base">Role Templates</Label>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <Label className="text-base font-semibold">Role Templates</Label>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
                     {ROLE_TEMPLATES.map((template) => (
                       <Card
                         key={template.id}
-                        className={`cursor-pointer transition-all ${
-                          selectedTemplate?.id === template.id
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'hover:border-gray-300'
-                        }`}
+                                className={`cursor-pointer hover:shadow-lg transition-all border-2 ${selectedTemplate?.id === template.id ? 'border-blue-500' : 'border-transparent'}`}
                         onClick={() => handleTemplateSelect(template)}
                       >
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <h4 className="font-semibold">{template.name}</h4>
-                              <p className="text-sm text-muted-foreground">{template.description}</p>
-                            </div>
+                                <CardContent className="p-4 relative">
+                                    <h3 className="font-semibold">{template.name}</h3>
+                                    <p className="text-sm text-gray-500">{template.description}</p>
                             {selectedTemplate?.id === template.id && (
-                              <CheckCircle2 className="h-5 w-5 text-blue-500" />
-                            )}
+                                        <div className="absolute top-2 right-2 h-5 w-5 bg-blue-500 text-white rounded-full flex items-center justify-center">
+                                            <Check className="h-3 w-3" />
                           </div>
+                                    )}
                         </CardContent>
                       </Card>
                     ))}
                   </div>
                 </div>
 
-                <Separator />
-
-                {/* Role Name Input */}
+                    {/* Role Name */}
                 <div className="space-y-2">
-                  <Label htmlFor="newRoleName" className="text-base">Role Name</Label>
+                      <Label htmlFor="roleName" className="text-base font-semibold">Role Name</Label>
                   <Input
-                    id="newRoleName"
+                        id="roleName"
                     value={newRoleName}
                     onChange={(e) => setNewRoleName(e.target.value)}
                     placeholder="e.g., Team Lead"
-                    disabled={!hasPermission(COMPONENT_PERMISSIONS.RolesPermissions) || isLoading}
-                    className="h-10 rounded-lg"
                   />
                 </div>
 
-                {/* Permissions Section */}
-                <div className="space-y-4">
-                  <Label className="text-base">Assign Permissions</Label>
-                  <ScrollArea className="h-[400px] rounded-lg border bg-card">
-                    <div className="p-4 space-y-6">
-                      {Object.entries(permissionGroups).map(([category, { description, permissions }]) => (
-                        <Accordion type="single" collapsible key={category}>
-                          <AccordionItem value={category}>
-                            <AccordionTrigger className="hover:no-underline">
+                    {/* Assign Permissions */}
+                    <div>
+                         <Label className="text-base font-semibold">Assign Permissions</Label>
+                         <Accordion type="multiple" className="w-full mt-2 space-y-3">
+                            {Object.entries(permissionGroups).map(([groupKey, group]) => (
+                                <AccordionItem key={groupKey} value={groupKey} className="border rounded-lg">
+                                    <AccordionTrigger className="p-4 hover:no-underline">
                               <div className="flex items-center justify-between w-full">
-                                <div className="flex items-center space-x-2">
-                                  <h4 className="font-semibold text-lg">{category}</h4>
-                                  <Badge variant="outline" className="ml-2">
-                                    {permissions.length} permissions
+                                            <div className="flex items-center gap-3">
+                                                <span className="font-semibold">{group.description}</span>
+                                                <Badge variant="secondary">
+                                                  {countAssignedPermissions((newRolePermissions as any)[groupKey])} / {countTotalPermissionsInGroup((newRolePermissions as any)[groupKey])} permissions
                                   </Badge>
                                 </div>
-                                <div className="flex items-center space-x-2">
+                                            <div className="flex items-center gap-2 pr-2">
                                   <Checkbox
-                                    id={`select-all-${category}`}
-                                    checked={permissions.every(permission => 
-                                      newRolePermissions.includes(permission)
-                                    )}
-                                    onCheckedChange={(checked: boolean) => {
-                                      if (checked) {
-                                        const newPermissions = [...newRolePermissions];
-                                        (permissions as string[]).forEach(permission => {
-                                          if (!newPermissions.includes(permission)) {
-                                            newPermissions.push(permission);
-                                          }
-                                        });
-                                        setNewRolePermissions(newPermissions);
-                                      } else {
-                                        setNewRolePermissions(prev => 
-                                          prev.filter(p => !(permissions as string[]).includes(p))
-                                        );
-                                      }
-                                    }}
-                                    disabled={!hasPermission(COMPONENT_PERMISSIONS.RolesPermissions) || isLoading}
-                                  />
-                                  <label
-                                    htmlFor={`select-all-${category}`}
-                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                  >
-                                    Select All
-                                  </label>
+                                                    id={`select-all-${groupKey}`}
+                                                    checked={areAllModulePermissionsSelected(groupKey)}
+                                                    onCheckedChange={(checked) => handleSelectAllModulePermissions(groupKey, checked as boolean)}
+                                                 />
+                                                 <Label htmlFor={`select-all-${groupKey}`} className="text-sm">Select All</Label>
                                 </div>
                               </div>
                             </AccordionTrigger>
-                            <AccordionContent>
-                              <div className="space-y-1">
-                                <p className="text-sm text-muted-foreground">{description}</p>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-                                  {permissions.map((permission) => {
-                                    const hasDependencies = PERMISSION_DEPENDENCIES.some(
-                                      d => d.permission === permission
-                                    );
-                                    const isEnabled = !showDependencies || 
-                                      checkPermissionDependencies(permission, newRolePermissions);
-
-                                    return (
-                                      <div
-                                        key={permission}
-                                        className={`flex items-center space-x-3 p-2 rounded-md transition-colors ${
-                                          isEnabled
-                                            ? 'hover:bg-muted/50'
-                                            : 'opacity-50 cursor-not-allowed'
-                                        }`}
-                                      >
+                                    <AccordionContent className="p-4 pt-0">
+                                        <div className="space-y-4 pt-4 border-t">
+                                            {Object.entries(group.modules).map(([moduleKey, moduleName]) => (
+                                            <Card key={moduleKey}>
+                                                <CardHeader>
+                                                <CardTitle className="text-base">{moduleName}</CardTitle>
+                                                </CardHeader>
+                                                <CardContent>
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                    {['view', 'create', 'edit', 'delete'].map((action) => (
+                                                    (newRolePermissions[groupKey as keyof UserPermissions] as any)?.[moduleKey]?.[action] !== undefined && (
+                                                        <div key={action} className="flex items-center space-x-2">
                                         <Checkbox
-                                          id={`new-role-${permission}`}
-                                          checked={newRolePermissions.includes(permission)}
-                                          onCheckedChange={(checked: boolean) => 
-                                            isEnabled && handleNewRolePermissionChange(permission, checked)
-                                          }
-                                          disabled={!hasPermission(COMPONENT_PERMISSIONS.RolesPermissions) || 
-                                            isLoading || !isEnabled}
-                                        />
-                                        <div className="flex-1">
-                                          <label
-                                            htmlFor={`new-role-${permission}`}
-                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                          >
-                                            {permission.replace(/_/g, ' ')}
-                                          </label>
-                                          {showDependencies && hasDependencies && (
-                                            <p className="text-xs text-muted-foreground mt-1">
-                                              Requires: {PERMISSION_DEPENDENCIES
-                                                .find(d => d.permission === permission)
-                                                ?.requires.map(r => r.replace(/_/g, ' '))
-                                                .join(', ')}
-                                            </p>
-                                          )}
+                                                            id={`${groupKey}-${moduleKey}-${action}`}
+                                                            checked={(newRolePermissions[groupKey as keyof UserPermissions] as any)?.[moduleKey]?.[action] || false}
+                                                            onCheckedChange={(checked) =>
+                                                            handleNewRolePermissionChange(
+                                                                groupKey,
+                                                                moduleKey,
+                                                                action,
+                                                                checked as boolean
+                                                            )
+                                                            }
+                                                        />
+                                                        <Label htmlFor={`${groupKey}-${moduleKey}-${action}`} className="capitalize">
+                                                            {action}
+                                                        </Label>
                                         </div>
+                                                    )
+                                                    ))}
                                       </div>
-                                    );
-                                  })}
-                                </div>
+                                                </CardContent>
+                                            </Card>
+                                            ))}
                               </div>
                             </AccordionContent>
                           </AccordionItem>
-                        </Accordion>
                       ))}
-                    </div>
-                  </ScrollArea>
+                        </Accordion>
                 </div>
 
-                <div className="flex justify-end">
-                  <Button 
-                    onClick={handleCreateRole} 
-                    disabled={!hasPermission(COMPONENT_PERMISSIONS.RolesPermissions) || isLoading}
-                    className="w-full sm:w-auto h-10 rounded-lg bg-[#000000] hover:bg-[#000000] text-white"
-                  >
-                    <Plus className="w-4 h-4 mr-2" /> Create Role
+                    <div className="flex justify-end pt-4">
+                      <Button onClick={handleCreateRole} disabled={!newRoleName.trim()} className="bg-gray-900 hover:bg-gray-800 text-white">
+                        <Plus className="mr-2 h-4 w-4" /> Create Role
                   </Button>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="history" className="space-y-4">
-            {/* Role History Card */}
+          <TabsContent value="history" className="mt-6">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center text-xl">
-                  <History className="mr-2 h-5 w-5" /> Role History
-                </CardTitle>
-                <CardDescription>Track changes made to roles and permissions</CardDescription>
+                <CardTitle>Role History</CardTitle>
+                <CardDescription>Track changes to roles and permissions</CardDescription>
               </CardHeader>
               <CardContent>
-                <ScrollArea className="h-[400px]">
-                  <div className="space-y-4">
-                    {roleHistory.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
-                        No role history available
-                      </div>
-                    ) : (
-                      roleHistory.map((history) => (
-                        <div key={history.id} className="flex items-start space-x-4 p-4 border rounded-lg hover:bg-muted/50 transition-colors">
-                          <div className="p-2 rounded-full bg-muted">
-                            {history.action === 'created' && <Plus className="h-4 w-4" />}
-                            {history.action === 'updated' && <Edit2 className="h-4 w-4" />}
-                            {history.action === 'deleted' && <Trash2 className="h-4 w-4" />}
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="font-medium">{history.roleName}</p>
-                                <p className="text-sm text-muted-foreground">
-                                  {history.action.charAt(0).toUpperCase() + history.action.slice(1)} by {history.user}
-                                </p>
-                              </div>
-                              <span className="text-sm text-muted-foreground">
-                                {new Date(history.timestamp).toLocaleString()}
-                              </span>
-                            </div>
-                            {history.changes.length > 0 && (
-                              <div className="mt-2 space-y-1">
-                                {history.changes.map((change, index) => (
-                                  <div key={index} className="text-sm">
-                                    <span className="font-medium">{change.field}:</span>{' '}
-                                    <span className="text-muted-foreground">
-                                      {change.field === 'permissions' ? (
-                                        <span>
-                                          {ensurePermissionsArray(change.oldValue).length} → {ensurePermissionsArray(change.newValue).length} permissions
-                                        </span>
-                                      ) : (
-                                        <span>
-                                          {JSON.stringify(change.oldValue)} → {JSON.stringify(change.newValue)}
-                                        </span>
-                                      )}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </ScrollArea>
+                 {roleHistory.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Role Name</TableHead>
+                        <TableHead>Action</TableHead>
+                        <TableHead>Details</TableHead>
+                        <TableHead>Performed By</TableHead>
+                        <TableHead>Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {roleHistory.map(entry => (
+                        <TableRow key={entry.id}>
+                          <TableCell><Badge variant="outline">{entry.roleName}</Badge></TableCell>
+                          <TableCell>
+                            <Badge variant={entry.action === 'created' ? 'default' : 'destructive'} className="capitalize">
+                              {entry.action}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm text-gray-600">
+                            {entry.action === 'created' && `Role "${entry.roleName}" was created.`}
+                            {entry.action === 'deleted' && `Role "${entry.roleName}" was deleted.`}
+                            {entry.action === 'updated' && `Role "${entry.roleName}" was updated.`}
+                          </TableCell>
+                          <TableCell>{entry.user}</TableCell>
+                          <TableCell>{new Date(entry.timestamp).toLocaleString()}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                 ) : (
+                  <p className="text-gray-500">No history to display yet. Create or delete a role to see changes here.</p>
+                 )}
               </CardContent>
             </Card>
           </TabsContent>
+
         </Tabs>
 
-        {/* Dialogs */}
         {/* Delete Confirmation Dialog */}
         <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Delete Role</DialogTitle>
               <DialogDescription>
-                Are you sure you want to delete the role "{roleToDelete}"? 
-                {(() => {
-                  const usersWithRole = users.filter(user => user.role === roleToDelete);
-                  return usersWithRole.length > 0 
-                    ? ` This role is currently assigned to ${usersWithRole.length} user(s). You must unassign all users before deleting this role.`
-                    : " This action cannot be undone.";
-                })()}
+                Are you sure you want to delete the role "{roleToDelete?.name}"? This action cannot be undone.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button 
-                variant="destructive" 
-                onClick={confirmDeleteRole}
-                disabled={(() => {
-                  const usersWithRole = users.filter(user => user.role === roleToDelete);
-                  return usersWithRole.length > 0;
-                })()}
-              >
+              <Button variant="destructive" onClick={confirmDeleteRole}>
                 Delete
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Bulk Delete Confirmation Dialog */}
-        <Dialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete Selected Roles</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to delete {selectedRoles.length} selected roles? This action cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsBulkDeleteDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button variant="destructive" onClick={confirmBulkDelete}>
-                Delete All
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Role Comparison Dialog */}
-        <Dialog open={isComparing} onOpenChange={setIsComparing}>
-          <DialogContent className="sm:max-w-[800px] max-h-[90vh]">
-            <DialogHeader>
-              <DialogTitle>Compare Roles</DialogTitle>
-              <DialogDescription>
-                Select two roles to compare their permissions
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Select
-                  value={rolesToCompare[0]}
-                  onValueChange={(value) => setRolesToCompare([value, rolesToCompare[1]])}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select first role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((role) => (
-                      <SelectItem key={`${role.id || role._id}-${role.name}`} value={role.name}>
-                        {role.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={rolesToCompare[1]}
-                  onValueChange={(value) => setRolesToCompare([rolesToCompare[0], value])}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select second role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((role) => (
-                      <SelectItem key={`${role.id || role._id}-${role.name}`} value={role.name}>
-                        {role.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {rolesToCompare[0] && rolesToCompare[1] && (
-                <div className="border rounded-lg">
-                  <ScrollArea className="h-[500px]">
-                    <Table>
-                      <TableHeader className="sticky top-0 bg-background z-10">
-                        <TableRow>
-                          <TableHead className="w-[50%]">Permission</TableHead>
-                          <TableHead className="text-center">{rolesToCompare[0]}</TableHead>
-                          <TableHead className="text-center">{rolesToCompare[1]}</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {Object.entries(permissionGroups).map(([category, { permissions }]) => (
-                          <React.Fragment key={category}>
-                            <TableRow className="bg-muted/50">
-                              <TableCell colSpan={3} className="font-semibold">
-                                {category}
-                              </TableCell>
-                            </TableRow>
-                            {permissions.map((permission) => {
-                              const role1 = roles.find(r => r.name === rolesToCompare[0]);
-                              const role2 = roles.find(r => r.name === rolesToCompare[1]);
-                              const hasPermission1 = ensurePermissionsArray(role1?.permissions).includes(permission);
-                              const hasPermission2 = ensurePermissionsArray(role2?.permissions).includes(permission);
-
-                              return (
-                                <TableRow key={permission}>
-                                  <TableCell className="font-medium">
-                                    {permission.replace(/_/g, ' ')}
-                                  </TableCell>
-                                  <TableCell className="text-center">
-                                    {hasPermission1 ? (
-                                      <div className="flex items-center justify-center">
-                                        <CheckCircle2 className="h-5 w-5 text-green-500" />
-                                        <span className="sr-only">Has permission</span>
-                                      </div>
-                                    ) : (
-                                      <div className="flex items-center justify-center">
-                                        <XCircle className="h-5 w-5 text-red-500" />
-                                        <span className="sr-only">No permission</span>
-                                      </div>
-                                    )}
-                                  </TableCell>
-                                  <TableCell className="text-center">
-                                    {hasPermission2 ? (
-                                      <div className="flex items-center justify-center">
-                                        <CheckCircle2 className="h-5 w-5 text-green-500" />
-                                        <span className="sr-only">Has permission</span>
-                                      </div>
-                                    ) : (
-                                      <div className="flex items-center justify-center">
-                                        <XCircle className="h-5 w-5 text-red-500" />
-                                        <span className="sr-only">No permission</span>
-                                      </div>
-                                    )}
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </React.Fragment>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </ScrollArea>
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-
         {/* Edit Role Dialog */}
-        {selectedRole && (
-          <Dialog open={!!selectedRole} onOpenChange={() => setSelectedRole(null)}>
-            <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
-              <DialogHeader className="space-y-4">
-                <DialogTitle className="flex items-center text-xl">
-                  <Pencil className="mr-2 h-5 w-5" /> Edit Permissions for {selectedRole.name}
-                </DialogTitle>
-                <DialogDescription>
-                  Adjust the permissions for the {selectedRole.name} role. Changes will be reflected immediately for all users with this role.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <ScrollArea className="h-[500px] rounded-lg border bg-card">
-                  <div className="p-4 space-y-6">
-                    {Object.entries(permissionGroups).map(([category, { description, permissions }]) => (
-                      <div key={category} className="space-y-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <h4 className="font-semibold text-lg">{category}</h4>
-                              <p className="text-sm text-muted-foreground">{description}</p>
-                            </div>
-                            <div className="flex items-center space-x-2">
+        <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+          <DialogContent className="max-w-4xl">
+            <DialogHeader>
+              <DialogTitle>Edit Role: {editingRole?.name}</DialogTitle>
+              <DialogDescription>
+                Modify the permissions for the "{editingRole?.name}" role.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 max-h-[60vh] overflow-y-auto">
+              {editingRolePermissions && (
+                 <Accordion type="multiple" className="w-full mt-2 space-y-3">
+                    {Object.entries(permissionGroups).map(([groupKey, group]) => (
+                        <AccordionItem key={groupKey} value={groupKey} className="border rounded-lg">
+                            <AccordionTrigger className="p-4 hover:no-underline">
+                                <div className="flex items-center justify-between w-full">
+                                    <div className="flex items-center gap-3">
+                                        <span className="font-semibold">{group.description}</span>
+                                        <Badge variant="secondary">
+                                          {countAssignedPermissions((editingRolePermissions as any)[groupKey])} / {countTotalPermissionsInGroup((editingRolePermissions as any)[groupKey])} permissions
+                                        </Badge>
+              </div>
+                                    <div className="flex items-center gap-2 pr-2">
                               <Checkbox
-                                id={`select-all-${category}-edit`}
-                                checked={permissions.every(permission => 
-                                  ensurePermissionsArray(selectedRole.permissions).includes(permission)
-                                )}
-                                onCheckedChange={(checked: boolean) => {
-                                  if (checked) {
-                                    const newPermissions = [...ensurePermissionsArray(selectedRole.permissions)];
-                                    (permissions as string[]).forEach(permission => {
-                                      if (!newPermissions.includes(permission)) {
-                                        newPermissions.push(permission);
-                                      }
-                                    });
-                                    setSelectedRole(prev => {
-                                      if (!prev) return null;
-                                      return { ...prev, permissions: newPermissions };
-                                    });
-                                    (permissions as string[]).forEach(permission => {
-                                      handlePermissionChange(selectedRole.name, permission, true);
-                                    });
-                                  } else {
-                                    const newPermissions = ensurePermissionsArray(selectedRole.permissions).filter(
-                                      p => !(permissions as string[]).includes(p)
-                                    );
-                                    setSelectedRole(prev => {
-                                      if (!prev) return null;
-                                      return { ...prev, permissions: newPermissions };
-                                    });
-                                    (permissions as string[]).forEach(permission => {
-                                      handlePermissionChange(selectedRole.name, permission, false);
-                                    });
-                                  }
-                                }}
-                                disabled={!hasPermission(COMPONENT_PERMISSIONS.RolesPermissions) || isLoading}
-                              />
-                              <label
-                                htmlFor={`select-all-${category}-edit`}
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                              >
-                                Select All
-                              </label>
+                                            id={`select-all-edit-${groupKey}`}
+                                            checked={areAllEditingModulePermissionsSelected(groupKey)}
+                                            onCheckedChange={(checked) => handleSelectAllEditingModulePermissions(groupKey, checked as boolean)}
+                                         />
+                                         <Label htmlFor={`select-all-edit-${groupKey}`} className="text-sm">Select All</Label>
                             </div>
                           </div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {permissions.map((permission) => (
-                            <div key={permission} className="flex items-center space-x-3 p-2 rounded-md hover:bg-muted/50 transition-colors">
+                            </AccordionTrigger>
+                            <AccordionContent className="p-4 pt-0">
+                                <div className="space-y-4 pt-4 border-t">
+                                    {Object.entries(group.modules).map(([moduleKey, moduleName]) => (
+                                    <Card key={moduleKey}>
+                                        <CardHeader>
+                                        <CardTitle className="text-base">{moduleName}</CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                            {['view', 'create', 'edit', 'delete'].map((action) => (
+                                            (editingRolePermissions[groupKey as keyof UserPermissions] as any)?.[moduleKey]?.[action] !== undefined && (
+                                                <div key={action} className="flex items-center space-x-2">
                               <Checkbox 
-                                id={`${selectedRole.name}-${permission}`}
-                                checked={ensurePermissionsArray(selectedRole.permissions).includes(permission)}
-                                onCheckedChange={(checked: boolean) => {
-                                  handlePermissionChange(selectedRole.name, permission, checked);
-                                  setSelectedRole(prev => {
-                                    if (!prev) return null;
-                                    const updatedPermissions = checked
-                                      ? [...ensurePermissionsArray(prev.permissions), permission]
-                                      : ensurePermissionsArray(prev.permissions).filter(p => p !== permission);
-                                    return { ...prev, permissions: updatedPermissions };
-                                  });
-                                }}
-                                disabled={!hasPermission(COMPONENT_PERMISSIONS.RolesPermissions) || isLoading}
-                              />
-                              <label
-                                htmlFor={`${selectedRole.name}-${permission}`}
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                              >
-                                {permission.replace(/_/g, ' ')}
-                              </label>
+                                                    id={`edit-${groupKey}-${moduleKey}-${action}`}
+                                                    checked={(editingRolePermissions[groupKey as keyof UserPermissions] as any)?.[moduleKey]?.[action] || false}
+                                                    onCheckedChange={(checked) =>
+                                                      handleEditRolePermissionChange(
+                                                        groupKey,
+                                                        moduleKey,
+                                                        action,
+                                                        checked as boolean
+                                                      )
+                                                    }
+                                                />
+                                                <Label htmlFor={`edit-${groupKey}-${moduleKey}-${action}`} className="capitalize">
+                                                    {action}
+                                                </Label>
                             </div>
+                                            )
                           ))}
                         </div>
-                        <Separator className="my-4" />
+                                        </CardContent>
+                                    </Card>
+                                    ))}
                       </div>
+                            </AccordionContent>
+                        </AccordionItem>
                     ))}
+                </Accordion>
+              )}
                   </div>
-                </ScrollArea>
-              </div>
-              <DialogFooter className="gap-2 sm:gap-0">
-                <Button 
-                  variant="outline" 
-                  onClick={() => setSelectedRole(null)}
-                  className="h-10 rounded-lg"
-                >
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>
                   Cancel
                 </Button>
-                <Button 
-                  onClick={() => {
-                    if (selectedRole) {
-                      // Update all permissions for the role
-                      updateRole(selectedRole.name, ensurePermissionsArray(selectedRole.permissions));
-                      
-                      // Add to history
-                      setRoleHistory(prev => [
-                        {
-                          id: Date.now().toString(),
-                          roleName: selectedRole.name,
-                          action: 'updated',
-                          changes: [
-                            {
-                              field: 'permissions',
-                              oldValue: ensurePermissionsArray(roles.find(r => r.name === selectedRole.name)?.permissions),
-                              newValue: ensurePermissionsArray(selectedRole.permissions)
-                            }
-                          ],
-                          timestamp: new Date().toISOString(),
-                          user: 'Current User'
-                        },
-                        ...prev
-                      ]);
-                    }
-                    setSelectedRole(null);
-                    toast({
-                      title: "Success",
-                      description: `Permissions for ${selectedRole?.name} role have been updated.`,
-                    });
-                  }}
-                  className="h-10 rounded-lg bg-[#000000] hover:bg-[#000000] text-white"
-                >
+              <Button onClick={handleUpdateRole}>
                   Save Changes
                 </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        )}
 
         {/* Assign User Dialog */}
         <Dialog open={isAssignUserDialogOpen} onOpenChange={setIsAssignUserDialogOpen}>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent>
             <DialogHeader>
-              <DialogTitle>Assign Users to Role</DialogTitle>
+              <DialogTitle>Assign Role: {roleToAssignUser?.name}</DialogTitle>
               <DialogDescription>
-                Select users to assign to the {roleToAssignUser?.name} role
+                Select a user to assign the "{roleToAssignUser?.name}" role to.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <div className="py-4">
                 <Input
-                  placeholder="Search users by name or email..."
-                  className="pl-9 h-10 rounded-lg"
+                placeholder="Search users..."
                   value={userSearchTerm}
                   onChange={(e) => setUserSearchTerm(e.target.value)}
-                />
-              </div>
-              <ScrollArea className="h-[300px] rounded-lg border bg-card">
-                <div className="p-4 space-y-2">
-                  {filteredUsers.length === 0 ? (
-                    <Alert>
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertTitle>No users found</AlertTitle>
-                      <AlertDescription>
-                        Try adjusting your search criteria.
-                      </AlertDescription>
-                    </Alert>
-                  ) : (
-                    filteredUsers.map(user => (
-                      <div key={user.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                className="mb-4"
+              />
+              <div className="space-y-2 max-h-[40vh] overflow-y-auto">
+                {users
+                  .filter(u => u.name.toLowerCase().includes(userSearchTerm.toLowerCase()) && u.role !== roleToAssignUser?.name)
+                  .map(u => (
+                    <div key={u.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-100">
                         <div>
-                          <p className="font-medium">{user.name}</p>
-                          <p className="text-sm text-muted-foreground">{user.email} - {user.role}</p>
+                        <p className="font-medium">{u.name}</p>
+                        <p className="text-sm text-gray-500">{u.email}</p>
                         </div>
-                        <div className="flex space-x-2">
-                          {user.role === roleToAssignUser?.name ? (
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleUnassignUser(user.id)}
-                              disabled={isLoading}
-                              className="h-8 rounded-lg"
-                            >
-                              Unassign
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              onClick={() => handleAssignUser(user.id)}
-                              disabled={isLoading}
-                              className="h-8 rounded-lg bg-[#000000] hover:bg-[#000000] text-white"
-                            >
+                      <Button size="sm" onClick={() => handleAssignRoleToUser(u.id)}>
                               Assign
                             </Button>
-                          )}
                         </div>
+                  ))}
                       </div>
-                    ))
-                  )}
-                </div>
-              </ScrollArea>
             </div>
           </DialogContent>
         </Dialog>
 
-        {/* View Users Dialog */}
-        {viewUsersRole && (
+        {/* View Assigned Users Dialog */}
           <Dialog open={!!viewUsersRole} onOpenChange={() => setViewUsersRole(null)}>
             <DialogContent>
-              <DialogHeader className="space-y-4">
-                <DialogTitle className="text-xl">Users assigned to {viewUsersRole.name}</DialogTitle>
+                <DialogHeader>
+                    <DialogTitle>Users with Role: {viewUsersRole?.name}</DialogTitle>
+                    <DialogDescription>
+                        Manage users assigned to the "{viewUsersRole?.name}" role.
+                    </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
-                {users.filter(user => user.role === viewUsersRole.name).length === 0 ? (
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>No users assigned</AlertTitle>
-                    <AlertDescription>
-                      There are no users currently assigned to this role.
-                    </AlertDescription>
-                  </Alert>
-                ) : (
-                  <>
-                    <ScrollArea className="h-[300px] rounded-lg border bg-card">
-                      <div className="p-4 space-y-2">
-                        {users.filter(user => user.role === viewUsersRole.name).map(user => (
-                          <div key={user.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                <div className="py-4 space-y-4">
+                    <div className="space-y-2 max-h-[40vh] overflow-y-auto">
+                        {users
+                            .filter(u => u.role === viewUsersRole?.name)
+                            .map(u => (
+                                <div key={u.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-100">
                             <div>
-                              <span className="font-medium">{user.name}</span>
-                              <span className="ml-2 text-sm text-muted-foreground">{user.email}</span>
+                                        <p className="font-medium">{u.name}</p>
+                                        <p className="text-sm text-gray-500">{u.email}</p>
                             </div>
-                            <Button 
-                              size="sm" 
-                              variant="destructive" 
-                              onClick={() => {
-                                handleUnassignUser(user.id);
-                                toast({
-                                  title: 'Success',
-                                  description: `User ${user.name} has been unassigned from this role.`,
-                                });
-                              }}
-                              disabled={isLoading}
-                              className="h-8 rounded-lg"
-                            >
+                                    <Button size="sm" variant="outline" onClick={() => handleUnassignUser(u.id)}>
                               Unassign
                             </Button>
                           </div>
                         ))}
+                        {users.filter(u => u.role === viewUsersRole?.name).length === 0 && (
+                            <p className="text-center text-gray-500 py-4">No users are assigned to this role.</p>
+                        )}
                       </div>
-                    </ScrollArea>
-                    <Button
-                      variant="outline"
-                      className="w-full h-10 rounded-lg"
-                      onClick={() => {
-                        users.filter(user => user.role === viewUsersRole.name).forEach(user => {
-                          handleUnassignUser(user.id);
-                        });
-                        toast({
-                          title: 'Success',
-                          description: `All users have been unassigned from the ${viewUsersRole.name} role.`,
-                        });
-                        setViewUsersRole(null);
-                      }}
-                      disabled={isLoading}
-                    >
-                      Unassign All
+                    {users.filter(u => u.role === viewUsersRole?.name).length > 0 && (
+                      <DialogFooter className="!justify-between mt-4">
+                          <Button variant="outline" onClick={() => setViewUsersRole(null)}>Close</Button>
+                          <Button variant="destructive" onClick={handleUnassignAllUsers}>
+                              <X className="mr-2 h-4 w-4" /> Unassign All
                     </Button>
-                  </>
+                      </DialogFooter>
                 )}
               </div>
             </DialogContent>
           </Dialog>
-        )}
+
+        {/* Compare Roles Dialog */}
+        <Dialog open={isCompareModalOpen} onOpenChange={setIsCompareModalOpen}>
+            <DialogContent className="max-w-6xl">
+                <DialogHeader>
+                    <DialogTitle>Compare Roles</DialogTitle>
+                    <DialogDescription>
+                        Select at least two roles to see a side-by-side comparison of their permissions.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    {roles.map(role => (
+                      <div
+                        key={role.id}
+                        onClick={() => handleCompareRoleToggle(role)}
+                        className={cn(
+                          "p-4 border rounded-lg cursor-pointer transition-all",
+                          rolesToCompare.some(r => r.id === role.id) ? "border-blue-500 bg-blue-50" : "hover:bg-gray-50"
+                        )}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold">{role.name}</span>
+                          <Checkbox
+                            checked={rolesToCompare.some(r => r.id === role.id)}
+                            onCheckedChange={() => handleCompareRoleToggle(role)}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {rolesToCompare.length > 0 && (
+                     <div className="max-h-[50vh] overflow-y-auto">
+                        {renderPermissionComparison()}
+                      </div>
+                  )}
+                </div>
+            </DialogContent>
+        </Dialog>
       </div>
     </PermissionGuard>
   );

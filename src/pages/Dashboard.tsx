@@ -21,8 +21,8 @@ import {
   BarChart4} from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { useAuth } from '@/contexts/AuthContext';
-import { PERMISSIONS } from '@/contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
+import { PERMISSIONS } from '../contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import HRDashboardExtra from './HRDashboardExtra';
@@ -33,55 +33,55 @@ const MOCK_MODULE_DATA = [
     title: 'Employee Management',
     icon: <Users className="h-5 w-5" />,
     color: 'from-blue-600 to-blue-700',
-    permissions: [PERMISSIONS.VIEW_EMPLOYEES, PERMISSIONS.VIEW_DASHBOARD],
+    permissions: [PERMISSIONS.EMPLOYEE_VIEW, PERMISSIONS.DEPARTMENT_VIEW],
     stats: [
-      { label: 'Total Employees', value: '45', change: '+5%', trend: 'up', href: '/employees', permission: PERMISSIONS.VIEW_EMPLOYEES },
-      { label: 'Active Projects', value: '12', change: '+2', trend: 'up', href: '/projects', permission: PERMISSIONS.VIEW_PROJECTS },
-      { label: 'Attendance Rate', value: '95%', change: '+2%', trend: 'up', href: '/employees/attendance', permission: PERMISSIONS.VIEW_ATTENDANCE }
+      { label: 'Total Employees', value: '45', change: '+5%', trend: 'up', href: '/employees', permission: PERMISSIONS.EMPLOYEE_VIEW },
+      { label: 'Active Projects', value: '12', change: '+2', trend: 'up', href: '/projects', permission: PERMISSIONS.EMPLOYEE_VIEW },
+      { label: 'Attendance Rate', value: '95%', change: '+2%', trend: 'up', href: '/employees/attendance', permission: PERMISSIONS.ATTENDENCE_VIEW }
     ]
   },
   {
     title: 'Hiring Management',
     icon: <UserPlus className="h-5 w-5" />,
     color: 'from-green-600 to-green-700',
-    permissions: [PERMISSIONS.VIEW_JOBS, PERMISSIONS.VIEW_CANDIDATES],
+    permissions: [PERMISSIONS.JOB_VIEW, PERMISSIONS.CANDIDATE_VIEW],
     stats: [
-      { label: 'Open Positions', value: '8', change: '-2', trend: 'down', href: '/hiring/jobs', permission: PERMISSIONS.VIEW_JOBS },
-      { label: 'Active Candidates', value: '24', change: '+8', trend: 'up', href: '/hiring/candidates', permission: PERMISSIONS.VIEW_CANDIDATES },
-      { label: 'Interviews This Week', value: '12', change: '+3', trend: 'up', href: '/hiring/interviews', permission: PERMISSIONS.VIEW_INTERVIEWS }
+      { label: 'Open Positions', value: '8', change: '-2', trend: 'down', href: '/hiring/jobs', permission: PERMISSIONS.JOB_VIEW },
+      { label: 'Active Candidates', value: '24', change: '+8', trend: 'up', href: '/hiring/candidates', permission: PERMISSIONS.CANDIDATE_VIEW },
+      { label: 'Interviews This Week', value: '12', change: '+3', trend: 'up', href: '/hiring/interviews', permission: PERMISSIONS.INTERVIEW_VIEW }
     ]
   },
   {
     title: 'Project Management',
     icon: <Briefcase className="h-5 w-5" />,
     color: 'from-purple-600 to-purple-700',
-    permissions: [PERMISSIONS.VIEW_PROJECTS],
+    permissions: [PERMISSIONS.EMPLOYEE_VIEW],
     stats: [
-      { label: 'Active Projects', value: '15', change: '+3', trend: 'up', href: '/projects', permission: PERMISSIONS.VIEW_PROJECTS },
-      { label: 'Completed Projects', value: '8', change: '+2', trend: 'up', href: '/projects', permission: PERMISSIONS.VIEW_PROJECTS },
-      { label: 'Project Health', value: '92%', change: '+5%', trend: 'up', href: '/projects', permission: PERMISSIONS.VIEW_PROJECTS }
+      { label: 'Active Projects', value: '15', change: '+3', trend: 'up', href: '/projects', permission: PERMISSIONS.EMPLOYEE_VIEW },
+      { label: 'Completed Projects', value: '8', change: '+2', trend: 'up', href: '/projects', permission: PERMISSIONS.EMPLOYEE_VIEW },
+      { label: 'Project Health', value: '92%', change: '+5%', trend: 'up', href: '/projects', permission: PERMISSIONS.EMPLOYEE_VIEW }
     ]
   },
   {
     title: 'Sales & Clients',
     icon: <DollarSign className="h-5 w-5" />,
     color: 'from-orange-600 to-orange-700',
-    permissions: [PERMISSIONS.VIEW_CLIENTS, PERMISSIONS.VIEW_REVENUE_DETAILS],
+    permissions: [PERMISSIONS.EMPLOYEE_VIEW],
     stats: [
-      { label: 'Total Clients', value: '32', change: '+4', trend: 'up', href: '/sales/clients', permission: PERMISSIONS.VIEW_CLIENTS },
-      { label: 'Monthly Revenue', value: '$45K', change: '+15%', trend: 'up', href: '/sales/revenue', permission: PERMISSIONS.VIEW_REVENUE_DETAILS },
-      { label: 'Growth Rate', value: '+15%', change: '+3%', trend: 'up', href: '/sales/revenue', permission: PERMISSIONS.VIEW_REVENUE_DETAILS }
+      { label: 'Total Clients', value: '32', change: '+4', trend: 'up', href: '/sales/clients', permission: PERMISSIONS.EMPLOYEE_VIEW },
+      { label: 'Monthly Revenue', value: '$45K', change: '+15%', trend: 'up', href: '/sales/revenue', permission: PERMISSIONS.EMPLOYEE_VIEW },
+      { label: 'Growth Rate', value: '+15%', change: '+3%', trend: 'up', href: '/sales/revenue', permission: PERMISSIONS.EMPLOYEE_VIEW }
     ]
   },
   {
     title: 'Finance',
     icon: <CreditCard className="h-5 w-5" />,
     color: 'from-red-600 to-red-700',
-    permissions: [PERMISSIONS.VIEW_INVOICES, PERMISSIONS.VIEW_EXPENSES],
+    permissions: [PERMISSIONS.EMPLOYEE_VIEW],
     stats: [
-      { label: 'Pending Invoices', value: '12', change: '-3', trend: 'down', href: '/finance', permission: PERMISSIONS.VIEW_INVOICES },
-      { label: 'Monthly Expenses', value: '$28K', change: '-5%', trend: 'down', href: '/finance', permission: PERMISSIONS.VIEW_EXPENSES },
-      { label: 'Profit Margin', value: '35%', change: '+2%', trend: 'up', href: '/finance', permission: PERMISSIONS.VIEW_REVENUE_DETAILS }
+      { label: 'Pending Invoices', value: '12', change: '-3', trend: 'down', href: '/finance', permission: PERMISSIONS.EMPLOYEE_VIEW },
+      { label: 'Monthly Expenses', value: '$28K', change: '-5%', trend: 'down', href: '/finance', permission: PERMISSIONS.EMPLOYEE_VIEW },
+      { label: 'Profit Margin', value: '35%', change: '+2%', trend: 'up', href: '/finance', permission: PERMISSIONS.EMPLOYEE_VIEW }
     ]
   }
 ];
@@ -96,7 +96,7 @@ const MOCK_ACTIVITIES_DATA = [
     icon: <Users className="h-4 w-4" />,
     status: 'success',
     href: '/employees',
-    permission: PERMISSIONS.VIEW_EMPLOYEES
+    permission: PERMISSIONS.EMPLOYEE_VIEW
   },
   {
     id: 2,
@@ -107,7 +107,7 @@ const MOCK_ACTIVITIES_DATA = [
     icon: <CheckCircle className="h-4 w-4" />,
     status: 'success',
     href: '/projects',
-    permission: PERMISSIONS.VIEW_PROJECTS
+    permission: PERMISSIONS.EMPLOYEE_VIEW
   },
   {
     id: 3,
@@ -118,7 +118,7 @@ const MOCK_ACTIVITIES_DATA = [
     icon: <FileText className="h-4 w-4" />,
     status: 'success',
     href: '/sales/contracts',
-    permission: PERMISSIONS.VIEW_CONTRACTS
+    permission: PERMISSIONS.EMPLOYEE_VIEW
   },
   {
     id: 4,
@@ -129,7 +129,7 @@ const MOCK_ACTIVITIES_DATA = [
     icon: <CreditCard className="h-4 w-4" />,
     status: 'pending',
     href: '/finance/invoices',
-    permission: PERMISSIONS.VIEW_INVOICES
+    permission: PERMISSIONS.EMPLOYEE_VIEW
   }
 ];
 
@@ -142,7 +142,7 @@ const MOCK_EVENTS_DATA = [
     icon: <Calendar className="h-4 w-4" />,
     priority: 'high',
     href: '/team-meetings',
-    permission: PERMISSIONS.VIEW_EMPLOYEES
+    permission: PERMISSIONS.EMPLOYEE_VIEW
   },
   {
     id: 2,
@@ -152,7 +152,7 @@ const MOCK_EVENTS_DATA = [
     icon: <FileText className="h-4 w-4" />,
     priority: 'medium',
     href: '/client-presentations',
-    permission: PERMISSIONS.VIEW_CLIENTS
+    permission: PERMISSIONS.EMPLOYEE_VIEW
   },
   {
     id: 3,
@@ -162,7 +162,7 @@ const MOCK_EVENTS_DATA = [
     icon: <CheckCircle className="h-4 w-4" />,
     priority: 'high',
     href: '/project-reviews',
-    permission: PERMISSIONS.VIEW_PROJECTS
+    permission: PERMISSIONS.EMPLOYEE_VIEW
   }
 ];
 
@@ -173,7 +173,7 @@ const MOCK_METRICS_DATA = [
     target: 90,
     icon: <TrendingUp className="h-4 w-4" />,
     color: 'bg-blue-500',
-    permission: PERMISSIONS.VIEW_PROJECTS
+    permission: PERMISSIONS.EMPLOYEE_VIEW
   },
   {
     title: 'Client Satisfaction',
@@ -181,7 +181,7 @@ const MOCK_METRICS_DATA = [
     target: 95,
     icon: <CheckCircle className="h-4 w-4" />,
     color: 'bg-green-500',
-    permission: PERMISSIONS.VIEW_CLIENTS
+    permission: PERMISSIONS.EMPLOYEE_VIEW
   },
   {
     title: 'Resource Utilization',
@@ -189,7 +189,7 @@ const MOCK_METRICS_DATA = [
     target: 85,
     icon: <Users className="h-4 w-4" />,
     color: 'bg-purple-500',
-    permission: PERMISSIONS.VIEW_EMPLOYEES
+    permission: PERMISSIONS.EMPLOYEE_VIEW
   }
 ];
 
@@ -292,7 +292,7 @@ const Dashboard: React.FC = () => {
   const upcomingEvents = getUpcomingEvents(hasPermission);
   const performanceMetrics = getPerformanceMetrics(hasPermission);
 
-  const userName = user?.name || user?.email || 'User';
+  const userName = user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.email || 'User';
 
   const [quote] = useState(getRandomQuote());
   const [] = useState<Record<string, boolean>>(DEFAULT_WIDGETS);

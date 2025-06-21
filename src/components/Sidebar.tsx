@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "../contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -41,7 +41,7 @@ interface MenuItem {
 }
 
 export default function Sidebar() {
-  const { user, logout, hasPermission } = useAuth();
+  const { user, logout, hasPermission, hasModulePermission } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -56,20 +56,19 @@ export default function Sidebar() {
       title: "Dashboard",
       icon: <LayoutDashboard className="h-5 w-5" />,
       href: "/dashboard",
-      permission: "VIEW_DASHBOARD",
+      permission: "dashboard",
     },
     {
       title: "Employee Management",
       icon: <Users className="h-5 w-5" />,
       href: "/employees",
-      permission: "VIEW_EMPLOYEES",
+      permission: "employeemanagement",
       subItems: [
         {
           title: "All Employees",
           href: "/employees",
           permission: "VIEW_EMPLOYEES",
         },
-
         {
           title: "Departments",
           href: "/employees/departments",
@@ -96,7 +95,7 @@ export default function Sidebar() {
       title: "Hiring",
       icon: <UserPlus className="h-5 w-5" />,
       href: "/hiring",
-      permission: "VIEW_JOBS",
+      permission: "hiring",
       subItems: [
         {
           title: "Job Postings",
@@ -124,7 +123,7 @@ export default function Sidebar() {
       title: "Projects",
       icon: <Briefcase className="h-5 w-5" />,
       href: "/projects",
-      permission: "VIEW_PROJECTS",
+      permission: "projects",
       subItems: [
         {
           title: "All Projects",
@@ -162,7 +161,7 @@ export default function Sidebar() {
       title: "Sales & Clients",
       icon: <Building2 className="h-5 w-5" />,
       href: "/sales",
-      permission: "VIEW_CLIENTS",
+      permission: "sales",
       subItems: [
         {
           title: "Clients",
@@ -190,7 +189,7 @@ export default function Sidebar() {
       title: "Assets",
       icon: <Package className="h-5 w-5" />,
       href: "/assets",
-      permission: "VIEW_ASSETS",
+      permission: "assets",
       subItems: [
         {
           title: "All Assets",
@@ -213,7 +212,7 @@ export default function Sidebar() {
       title: "Finance",
       icon: <Wallet className="h-5 w-5" />,
       href: "/finance",
-      permission: "VIEW_INVOICES",
+      permission: "finance",
       subItems: [
         {
           title: "Invoices",
@@ -241,7 +240,7 @@ export default function Sidebar() {
       title: "Settings",
       icon: <Settings className="h-5 w-5" />,
       href: "/settings",
-      permission: "VIEW_SETTINGS",
+      permission: "settings",
       subItems: [
         {
           title: "Company Profile",
@@ -303,6 +302,12 @@ export default function Sidebar() {
   };
 
   const handleNavigation = (href: string, permission?: string) => {
+    // Administrator role has full access to everything
+    if (user?.role === 'Administrator' || user?.role === 'ADMIN') {
+      navigate(href);
+      return;
+    }
+    
     if (permission && !hasPermission(permission)) {
       toast({
         title: "Access Denied",
@@ -314,29 +319,148 @@ export default function Sidebar() {
     navigate(href);
   };
 
-  // Filter and organize menu items
-  const filteredMenuItems = menuItems
-    .filter((item) => {
-      if (!searchQuery) return true;
-      const searchLower = searchQuery.toLowerCase();
-      return (
-        item.title.toLowerCase().includes(searchLower) ||
-        item.subItems?.some((subItem) =>
-          subItem.title.toLowerCase().includes(searchLower)
-        )
-      );
-    })
-    .filter((item) => {
-      if (!item.permission) return true;
-      const hasMainPermission = hasPermission(item.permission);
+  const filteredItems = menuItems.filter(item => {
+    // If there's no permission required, show the item.
+    if (!item.permission) return true;
+
+    // For top-level items, check for module view permission.
+    return hasModulePermission(item.permission, 'view');
+  })
+  .map(item => {
+    // If search query is empty, return the item and all its sub-items that the user has permission to see.
+    if (!searchQuery) {
       if (item.subItems) {
-        const hasAccessibleSubItems = item.subItems.some(
-          (subItem) => !subItem.permission || hasPermission(subItem.permission)
+        const accessibleSubItems = item.subItems.filter(subItem => 
+          !subItem.permission || hasPermission(subItem.permission)
         );
-        return hasMainPermission && hasAccessibleSubItems;
+        return { ...item, subItems: accessibleSubItems };
       }
-      return hasMainPermission;
-    });
+      return item;
+    }
+
+    const searchLower = searchQuery.toLowerCase();
+    const selfMatch = item.title.toLowerCase().includes(searchLower);
+
+    if (item.subItems) {
+      const matchingSubItems = item.subItems.filter(subItem => 
+        subItem.title.toLowerCase().includes(searchLower) &&
+        (!subItem.permission || hasPermission(subItem.permission))
+      );
+      // If parent or any sub-item matches, show it with only matching sub-items.
+      if (selfMatch || matchingSubItems.length > 0) {
+        return { ...item, subItems: matchingSubItems };
+      }
+    } else if (selfMatch) {
+      return item;
+    }
+
+    return null; // Don't include the item if no part of it matches the search.
+  }).filter(Boolean) as MenuItem[];
+
+  const renderMenuItem = (item: MenuItem, isSubItem = false) => {
+    const isActive = location.pathname.startsWith(item.href);
+    const isExpanded = expandedItems.includes(item.title);
+
+    return (
+      <motion.div
+        key={item.title}
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="space-y-1"
+      >
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                className={cn(
+                  "w-full justify-start rounded-xl px-3 py-2 text-sm font-medium transition-all",
+                  "hover:bg-blue-50/50 hover:text-blue-600 hover:shadow-sm",
+                  isActive && "text-blue-600",
+                  !item.subItems && "h-10"
+                )}
+                onClick={() => {
+                  if (item.subItems) {
+                    toggleItem(item.title);
+                  } else {
+                    handleNavigation(item.href, item.permission);
+                  }
+                }}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center gap-3">
+                    <div className="p-1.5 rounded-lg bg-gradient-to-br from-blue-50 to-blue-100/50 shadow-sm">
+                      {item.icon}
+                    </div>
+                    {!isCollapsed && <span>{item.title}</span>}
+                  </div>
+                  {!isCollapsed && item.subItems && (
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 transition-transform duration-200",
+                        isExpanded ? "transform rotate-180" : ""
+                      )}
+                    />
+                  )}
+                </div>
+              </Button>
+            </TooltipTrigger>
+            {isCollapsed && (
+              <TooltipContent side="right" className="bg-white">
+                {item.title}
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
+
+        {!isCollapsed && item.subItems && (
+          <AnimatePresence>
+            {isExpanded && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2, ease: "easeInOut" }}
+                className="overflow-hidden"
+              >
+                <div className="pl-4 space-y-1">
+                  {item.subItems.map((subItem) => {
+                    const isSubActive = location.pathname === subItem.href;
+                    return (
+                    <motion.div
+                      key={subItem.title}
+                      initial={{ x: -20, opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      exit={{ x: -20, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <Button
+                        variant="ghost"
+                        className={cn(
+                          "w-full justify-start rounded-xl px-3 py-2 text-sm font-medium transition-all",
+                          "hover:bg-blue-50/50 hover:text-blue-600 hover:shadow-sm",
+                          isSubActive && "text-blue-600"
+                        )}
+                        onClick={() =>
+                          handleNavigation(
+                            subItem.href,
+                            subItem.permission
+                          )
+                        }
+                      >
+                        {subItem.title}
+                      </Button>
+                    </motion.div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
+      </motion.div>
+    );
+  };
 
   return (
     <div
@@ -373,106 +497,7 @@ export default function Sidebar() {
 
       <div className="flex-1 overflow-y-auto">
         <div className="p-2 space-y-1">
-          {filteredMenuItems.map((item) => (
-            <motion.div
-              key={item.title}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="space-y-1"
-            >
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      className={cn(
-                        "w-full justify-start rounded-xl px-3 py-2 text-sm font-medium transition-all",
-                        "hover:bg-blue-50/50 hover:text-blue-600 hover:shadow-sm",
-                        location.pathname.startsWith(item.href) &&
-                          "bg-blue-50/80 text-blue-600 shadow-sm",
-                        !item.subItems && "h-10"
-                      )}
-                      onClick={() => {
-                        if (item.subItems) {
-                          toggleItem(item.title);
-                        } else {
-                          handleNavigation(item.href, item.permission);
-                        }
-                      }}
-                    >
-                      <div className="flex items-center justify-between w-full">
-                        <div className="flex items-center gap-3">
-                          <div className="p-1.5 rounded-lg bg-gradient-to-br from-blue-50 to-blue-100/50 shadow-sm">
-                            {item.icon}
-                          </div>
-                          {!isCollapsed && <span>{item.title}</span>}
-                        </div>
-                        {!isCollapsed && item.subItems && (
-                          <ChevronDown
-                            className={cn(
-                              "h-4 w-4 transition-transform duration-200",
-                              expandedItems.includes(item.title)
-                                ? "transform rotate-180"
-                                : ""
-                            )}
-                          />
-                        )}
-                      </div>
-                    </Button>
-                  </TooltipTrigger>
-                  {isCollapsed && (
-                    <TooltipContent side="right" className="bg-white">
-                      {item.title}
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              </TooltipProvider>
-
-              {!isCollapsed && item.subItems && (
-                <AnimatePresence>
-                  {expandedItems.includes(item.title) && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2, ease: "easeInOut" }}
-                      className="overflow-hidden"
-                    >
-                      <div className="pl-4 space-y-1">
-                        {item.subItems.map((subItem) => (
-                          <motion.div
-                            key={subItem.title}
-                            initial={{ x: -20, opacity: 0 }}
-                            animate={{ x: 0, opacity: 1 }}
-                            exit={{ x: -20, opacity: 0 }}
-                            transition={{ duration: 0.2 }}
-                          >
-                            <Button
-                              variant="ghost"
-                              className={cn(
-                                "w-full justify-start rounded-xl px-3 py-2 text-sm font-medium transition-all",
-                                "hover:bg-blue-50/50 hover:text-blue-600 hover:shadow-sm",
-                                location.pathname === subItem.href &&
-                                  "bg-blue-50/80 text-blue-600 shadow-sm"
-                              )}
-                              onClick={() =>
-                                handleNavigation(
-                                  subItem.href,
-                                  subItem.permission
-                                )
-                              }
-                            >
-                              {subItem.title}
-                            </Button>
-                          </motion.div>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              )}
-            </motion.div>
-          ))}
+          {filteredItems.map((item) => renderMenuItem(item))}
         </div>
       </div>
 
@@ -497,7 +522,7 @@ export default function Sidebar() {
             </div>
             {!isCollapsed && (
               <div>
-                <div className="font-medium text-slate-900">{user?.name}</div>
+                <div className="font-medium text-slate-900">{user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.email}</div>
                 <div className="text-xs text-blue-600/70">{user?.role}</div>
               </div>
             )}

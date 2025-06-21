@@ -1,16 +1,18 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/ui/use-toast';
 import { authService } from '../services/auth.service';
 import { roleService } from '../services/role.service';
+import { permissionService, UserPermissions } from '../services/permission.service';
 import { Role } from '../types/models';
 
 interface User {
   id: string;
   email: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   role: string;
-  permissions: string[];
+  permissions: UserPermissions;
   phone?: string;
   location?: string;
   department?: string;
@@ -24,12 +26,13 @@ interface AuthContextType {
   register: (email: string, password: string) => Promise<void>;
   logout: () => void;
   hasPermission: (permission: string) => boolean;
+  hasModulePermission: (module: string, action: string) => boolean;
   updateUserRole: (userId: string, role: string) => void;
-  updateUserPermissions: (permissions: string[]) => void;
+  updateUserPermissions: (permissions: UserPermissions) => void;
   users: MockUser[];
   roles: Role[];
   userRoles: Record<string, string>;
-  updateRole: (roleName: string, permissions: string[]) => void;
+  updateRole: (roleName: string, permissions: UserPermissions) => void;
   createRole: (role: Partial<Role>) => void;
   deleteRole: (roleName: string) => void;
   assignRoleToUser: (userId: string, roleName: string) => void;
@@ -38,420 +41,178 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// Define all available permissions with module-based structure
+// Define all available permissions based on the new API structure
 export const PERMISSIONS = {
-  // Dashboard
-  VIEW_DASHBOARD: 'VIEW_DASHBOARD',
+  // Hiring Management
+  CANDIDATE_VIEW: 'CANDIDATE_VIEW',
+  CANDIDATE_CREATE: 'CANDIDATE_CREATE',
+  CANDIDATE_EDIT: 'CANDIDATE_EDIT',
+  CANDIDATE_DELETE: 'CANDIDATE_DELETE',
+  
+  INTERVIEW_VIEW: 'INTERVIEW_VIEW',
+  INTERVIEW_CREATE: 'INTERVIEW_CREATE',
+  INTERVIEW_EDIT: 'INTERVIEW_EDIT',
+  INTERVIEW_DELETE: 'INTERVIEW_DELETE',
+  
+  JOB_VIEW: 'JOB_VIEW',
+  JOB_CREATE: 'JOB_CREATE',
+  JOB_EDIT: 'JOB_EDIT',
+  JOB_DELETE: 'JOB_DELETE',
+  
+  ONBOARDING_VIEW: 'ONBOARDING_VIEW',
+  ONBOARDING_CREATE: 'ONBOARDING_CREATE',
+  ONBOARDING_EDIT: 'ONBOARDING_EDIT',
+  ONBOARDING_DELETE: 'ONBOARDING_DELETE',
   
   // Employee Management
-  VIEW_EMPLOYEES: 'VIEW_EMPLOYEES',
-  MANAGE_EMPLOYEES: 'MANAGE_EMPLOYEES',
-  VIEW_DEPARTMENTS: 'VIEW_DEPARTMENTS',
-  MANAGE_DEPARTMENTS: 'MANAGE_DEPARTMENTS',
-  VIEW_ATTENDANCE: 'VIEW_ATTENDANCE',
-  MANAGE_ATTENDANCE: 'MANAGE_ATTENDANCE',
-  VIEW_PERFORMANCE: 'VIEW_PERFORMANCE',
-  MANAGE_PERFORMANCE: 'MANAGE_PERFORMANCE',
-  VIEW_LEAVE: 'VIEW_LEAVE',
-  MANAGE_LEAVE: 'MANAGE_LEAVE',
+  EMPLOYEE_VIEW: 'EMPLOYEE_VIEW',
+  EMPLOYEE_CREATE: 'EMPLOYEE_CREATE',
+  EMPLOYEE_EDIT: 'EMPLOYEE_EDIT',
+  EMPLOYEE_DELETE: 'EMPLOYEE_DELETE',
   
-  // Employee Component Permissions
-  VIEW_EMPLOYEE_DETAILS: 'VIEW_EMPLOYEE_DETAILS',
-  EDIT_EMPLOYEE_DETAILS: 'EDIT_EMPLOYEE_DETAILS',
-  DELETE_EMPLOYEE: 'DELETE_EMPLOYEE',
-  VIEW_DEPARTMENT_DETAILS: 'VIEW_DEPARTMENT_DETAILS',
-  EDIT_DEPARTMENT_DETAILS: 'EDIT_DEPARTMENT_DETAILS',
-  DELETE_DEPARTMENT: 'DELETE_DEPARTMENT',
-  VIEW_ATTENDANCE_DETAILS: 'VIEW_ATTENDANCE_DETAILS',
-  EDIT_ATTENDANCE: 'EDIT_ATTENDANCE',
-  DELETE_ATTENDANCE: 'DELETE_ATTENDANCE',
-  VIEW_PERFORMANCE_DETAILS: 'VIEW_PERFORMANCE_DETAILS',
-  EDIT_PERFORMANCE: 'EDIT_PERFORMANCE',
-  DELETE_PERFORMANCE: 'DELETE_PERFORMANCE',
-  VIEW_LEAVE_DETAILS: 'VIEW_LEAVE_DETAILS',
-  APPROVE_LEAVE: 'APPROVE_LEAVE',
-  REJECT_LEAVE: 'REJECT_LEAVE',
-  DELETE_LEAVE: 'DELETE_LEAVE',
-  EDIT_LEAVE_DETAILS: 'EDIT_LEAVE_DETAILS',
+  DEPARTMENT_VIEW: 'DEPARTMENT_VIEW',
+  DEPARTMENT_CREATE: 'DEPARTMENT_CREATE',
+  DEPARTMENT_EDIT: 'DEPARTMENT_EDIT',
+  DEPARTMENT_DELETE: 'DEPARTMENT_DELETE',
   
-  // Hiring Management
-  VIEW_JOBS: 'VIEW_JOBS',
-  MANAGE_JOBS: 'MANAGE_JOBS',
-  VIEW_CANDIDATES: 'VIEW_CANDIDATES',
-  MANAGE_CANDIDATES: 'MANAGE_CANDIDATES',
-  VIEW_INTERVIEWS: 'VIEW_INTERVIEWS',
-  MANAGE_INTERVIEWS: 'MANAGE_INTERVIEWS',
-  VIEW_ONBOARDING: 'VIEW_ONBOARDING',
-  MANAGE_ONBOARDING: 'MANAGE_ONBOARDING',
+  LEAVE_VIEW: 'LEAVE_VIEW',
+  LEAVE_CREATE: 'LEAVE_CREATE',
+  LEAVE_EDIT: 'LEAVE_EDIT',
+  LEAVE_DELETE: 'LEAVE_DELETE',
   
-  // Hiring Component Permissions
-  VIEW_JOB_DETAILS: 'VIEW_JOB_DETAILS',
-  EDIT_JOB_DETAILS: 'EDIT_JOB_DETAILS',
-  DELETE_JOB: 'DELETE_JOB',
-  VIEW_CANDIDATE_DETAILS: 'VIEW_CANDIDATE_DETAILS',
-  EDIT_CANDIDATE_DETAILS: 'EDIT_CANDIDATE_DETAILS',
-  DELETE_CANDIDATE: 'DELETE_CANDIDATE',
-  VIEW_INTERVIEW_DETAILS: 'VIEW_INTERVIEW_DETAILS',
-  DELETE_INTERVIEW: 'DELETE_INTERVIEW',
-  SCHEDULE_INTERVIEW: 'SCHEDULE_INTERVIEW',
-  EDIT_INTERVIEW: 'EDIT_INTERVIEW',
-  VIEW_ONBOARDING_DETAILS: 'VIEW_ONBOARDING_DETAILS',
-  MANAGE_ONBOARDING_TASKS: 'MANAGE_ONBOARDING_TASKS',
-  EDIT_ONBOARDING_DETAILS: 'EDIT_ONBOARDING_DETAILS',
-  DELETE_ONBOARDING: 'DELETE_ONBOARDING',
+  ATTENDENCE_VIEW: 'ATTENDENCE_VIEW',
+  ATTENDENCE_CREATE: 'ATTENDENCE_CREATE',
+  ATTENDENCE_EDIT: 'ATTENDENCE_EDIT',
+  ATTENDENCE_DELETE: 'ATTENDENCE_DELETE',
   
-  // Project Management
-  VIEW_PROJECTS: 'VIEW_PROJECTS',
-  MANAGE_PROJECTS: 'MANAGE_PROJECTS',
-  VIEW_TASKS: 'VIEW_TASKS',
-  MANAGE_TASKS: 'MANAGE_TASKS',
-  
-  // Project Component Permissions
-  VIEW_PROJECT_DETAILS: 'VIEW_PROJECT_DETAILS',
-  EDIT_PROJECT_DETAILS: 'EDIT_PROJECT_DETAILS',
-  DELETE_PROJECT: 'DELETE_PROJECT',
-  VIEW_TASK_DETAILS: 'VIEW_TASK_DETAILS',
-  EDIT_TASK_DETAILS: 'EDIT_TASK_DETAILS',
-  DELETE_TASK: 'DELETE_TASK',
-  VIEW_SPRINT_DETAILS: 'VIEW_SPRINT_DETAILS',
-  EDIT_SPRINT_DETAILS: 'EDIT_SPRINT_DETAILS',
-  DELETE_SPRINT: 'DELETE_SPRINT',
-  MANAGE_SPRINTS: 'MANAGE_SPRINTS',
-  VIEW_TIMELINE: 'VIEW_TIMELINE',
-  EDIT_TIMELINE: 'EDIT_TIMELINE',
-  VIEW_RESOURCES: 'VIEW_RESOURCES',
-  ALLOCATE_RESOURCES: 'ALLOCATE_RESOURCES',
-  VIEW_DELIVERABLES: 'VIEW_DELIVERABLES',
-  MANAGE_DELIVERABLES: 'MANAGE_DELIVERABLES',
-  EDIT_DELIVERABLE_DETAILS: 'EDIT_DELIVERABLE_DETAILS',
-  DELETE_DELIVERABLE: 'DELETE_DELIVERABLE',
-  VIEW_DELIVERABLE_DETAILS: 'VIEW_DELIVERABLE_DETAILS',
-  
-  // Sales & Clients
-  VIEW_CLIENTS: 'VIEW_CLIENTS',
-  MANAGE_CLIENTS: 'MANAGE_CLIENTS',
-  VIEW_PROPOSALS: 'VIEW_PROPOSALS',
-  MANAGE_PROPOSALS: 'MANAGE_PROPOSALS',
-  VIEW_CONTRACTS: 'VIEW_CONTRACTS',
-  MANAGE_CONTRACTS: 'MANAGE_CONTRACTS',
-  VIEW_DEALS: 'VIEW_DEALS',
-  MANAGE_DEALS: 'MANAGE_DEALS',
-  VIEW_ANALYTICS: 'VIEW_ANALYTICS',
-  MANAGE_ANALYTICS: 'MANAGE_ANALYTICS',
-  
-  // Sales Component Permissions
-  VIEW_CLIENT_DETAILS: 'VIEW_CLIENT_DETAILS',
-  EDIT_CLIENT_DETAILS: 'EDIT_CLIENT_DETAILS',
-  DELETE_CLIENT: 'DELETE_CLIENT',
-  VIEW_PROPOSAL_DETAILS: 'VIEW_PROPOSAL_DETAILS',
-  EDIT_PROPOSAL_DETAILS: 'EDIT_PROPOSAL_DETAILS',
-  DELETE_PROPOSAL: 'DELETE_PROPOSAL',
-  VIEW_CONTRACT_DETAILS: 'VIEW_CONTRACT_DETAILS',
-  EDIT_CONTRACT_DETAILS: 'EDIT_CONTRACT_DETAILS',
-  DELETE_CONTRACT: 'DELETE_CONTRACT',
-  VIEW_REVENUE_DETAILS: 'VIEW_REVENUE_DETAILS',
-  MANAGE_REVENUE: 'MANAGE_REVENUE',
-  VIEW_DEAL_DETAILS: 'VIEW_DEAL_DETAILS',
-  EDIT_DEAL_DETAILS: 'EDIT_DEAL_DETAILS',
-  DELETE_DEAL: 'DELETE_DEAL',
-  
-  // Asset Management
-  VIEW_ASSETS: 'VIEW_ASSETS',
-  MANAGE_ASSETS: 'MANAGE_ASSETS',
-  VIEW_LICENSES: 'VIEW_LICENSES',
-  MANAGE_LICENSES: 'MANAGE_LICENSES',
-  VIEW_MAINTENANCE: 'VIEW_MAINTENANCE',
-  MANAGE_MAINTENANCE: 'MANAGE_MAINTENANCE',
-  
-  // Asset Component Permissions
-  VIEW_ASSET_DETAILS: 'VIEW_ASSET_DETAILS',
-  EDIT_ASSET_DETAILS: 'EDIT_ASSET_DETAILS',
-  DELETE_ASSET: 'DELETE_ASSET',
-  VIEW_LICENSE_DETAILS: 'VIEW_LICENSE_DETAILS',
-  EDIT_LICENSE_DETAILS: 'EDIT_LICENSE_DETAILS',
-  DELETE_LICENSE: 'DELETE_LICENSE',
-  VIEW_MAINTENANCE_DETAILS: 'VIEW_MAINTENANCE_DETAILS',
-  SCHEDULE_MAINTENANCE: 'SCHEDULE_MAINTENANCE',
-  EDIT_MAINTENANCE: 'EDIT_MAINTENANCE',
-  DELETE_MAINTENANCE: 'DELETE_MAINTENANCE',
-  
-  // Finance
-  VIEW_INVOICES: 'VIEW_INVOICES',
-  MANAGE_INVOICES: 'MANAGE_INVOICES',
-  VIEW_EXPENSES: 'VIEW_EXPENSES',
-  MANAGE_EXPENSES: 'MANAGE_EXPENSES',
-  VIEW_PAYROLL: 'VIEW_PAYROLL',
-  MANAGE_PAYROLL: 'MANAGE_PAYROLL',
-  VIEW_REPORTS: 'VIEW_REPORTS',
-  MANAGE_REPORTS: 'MANAGE_REPORTS',
-  
-  // Finance Component Permissions
-  VIEW_INVOICE_DETAILS: 'VIEW_INVOICE_DETAILS',
-  EDIT_INVOICE_DETAILS: 'EDIT_INVOICE_DETAILS',
-  DELETE_INVOICE: 'DELETE_INVOICE',
-  VIEW_EXPENSE_DETAILS: 'VIEW_EXPENSE_DETAILS',
-  EDIT_EXPENSE_DETAILS: 'EDIT_EXPENSE_DETAILS',
-  DELETE_EXPENSE: 'DELETE_EXPENSE',
-  VIEW_PAYROLL_DETAILS: 'VIEW_PAYROLL_DETAILS',
-  EDIT_PAYROLL_DETAILS: 'EDIT_PAYROLL_DETAILS',
-  VIEW_REPORT_DETAILS: 'VIEW_REPORT_DETAILS',
-  GENERATE_REPORTS: 'GENERATE_REPORTS',
-  PROCESS_PAYROLL: 'PROCESS_PAYROLL',
-  DELETE_PAYROLL: 'DELETE_PAYROLL',
-  EDIT_REPORT_DETAILS: 'EDIT_REPORT_DETAILS',
-  DELETE_REPORT: 'DELETE_REPORT',
+  PERFORMANCE_VIEW: 'PERFORMANCE_VIEW',
+  PERFORMANCE_CREATE: 'PERFORMANCE_CREATE',
+  PERFORMANCE_EDIT: 'PERFORMANCE_EDIT',
+  PERFORMANCE_DELETE: 'PERFORMANCE_DELETE',
   
   // Settings
-  VIEW_SETTINGS: 'VIEW_SETTINGS',
-  MANAGE_SETTINGS: 'MANAGE_SETTINGS',
-  MANAGE_USERS: 'MANAGE_USERS',
-  MANAGE_ROLES: 'MANAGE_ROLES',
+  COMPANYPROFILE_VIEW: 'COMPANYPROFILE_VIEW',
+  COMPANYPROFILE_CREATE: 'COMPANYPROFILE_CREATE',
+  COMPANYPROFILE_EDIT: 'COMPANYPROFILE_EDIT',
+  COMPANYPROFILE_DELETE: 'COMPANYPROFILE_DELETE',
   
-  // Settings Component Permissions
-  VIEW_COMPANY_PROFILE: 'VIEW_COMPANY_PROFILE',
-  EDIT_COMPANY_PROFILE: 'EDIT_COMPANY_PROFILE',
-  VIEW_ROLES_DETAILS: 'VIEW_ROLES_DETAILS',
-  EDIT_ROLES_DETAILS: 'EDIT_ROLES_DETAILS',
-  VIEW_SYSTEM_SETTINGS: 'VIEW_SYSTEM_SETTINGS',
-  EDIT_SYSTEM_SETTINGS: 'EDIT_SYSTEM_SETTINGS',
+  ROLESPERMISIONS_VIEW: 'ROLESPERMISIONS_VIEW',
+  ROLESPERMISIONS_CREATE: 'ROLESPERMISIONS_CREATE',
+  ROLESPERMISIONS_EDIT: 'ROLESPERMISIONS_EDIT',
+  ROLESPERMISIONS_DELETE: 'ROLESPERMISIONS_DELETE',
+  
+  SYSTEMSETTINGS_VIEW: 'SYSTEMSETTINGS_VIEW',
+  SYSTEMSETTINGS_CREATE: 'SYSTEMSETTINGS_CREATE',
+  SYSTEMSETTINGS_EDIT: 'SYSTEMSETTINGS_EDIT',
+  SYSTEMSETTINGS_DELETE: 'SYSTEMSETTINGS_DELETE',
+  
+  ROLESDETAILS_VIEW: 'ROLESDETAILS_VIEW',
+  ROLESDETAILS_EDIT: 'ROLESDETAILS_EDIT',
 } as const;
 
-// New module-based permission structure
+// Module-based permission structure
 export const MODULE_PERMISSIONS = {
   dashboard: {
-    view: PERMISSIONS.VIEW_DASHBOARD,
-  },
-  employees: {
-    view: PERMISSIONS.VIEW_EMPLOYEES,
-    create: PERMISSIONS.MANAGE_EMPLOYEES,
-    edit: PERMISSIONS.EDIT_EMPLOYEE_DETAILS,
-    delete: PERMISSIONS.DELETE_EMPLOYEE,
-    details: PERMISSIONS.VIEW_EMPLOYEE_DETAILS,
-  },
-  departments: {
-    view: PERMISSIONS.VIEW_DEPARTMENTS,
-    create: PERMISSIONS.MANAGE_DEPARTMENTS,
-    edit: PERMISSIONS.EDIT_DEPARTMENT_DETAILS,
-    delete: PERMISSIONS.DELETE_DEPARTMENT,
-    details: PERMISSIONS.VIEW_DEPARTMENT_DETAILS,
-  },
-  attendance: {
-    view: PERMISSIONS.VIEW_ATTENDANCE,
-    create: PERMISSIONS.MANAGE_ATTENDANCE,
-    edit: PERMISSIONS.EDIT_ATTENDANCE,
-    delete: PERMISSIONS.DELETE_ATTENDANCE,
-    details: PERMISSIONS.VIEW_ATTENDANCE_DETAILS,
-  },
-  performance: {
-    view: PERMISSIONS.VIEW_PERFORMANCE,
-    create: PERMISSIONS.MANAGE_PERFORMANCE,
-    edit: PERMISSIONS.EDIT_PERFORMANCE,
-    delete: PERMISSIONS.DELETE_PERFORMANCE,
-    details: PERMISSIONS.VIEW_PERFORMANCE_DETAILS,
-  },
-  leave: {
-    view: PERMISSIONS.VIEW_LEAVE,
-    create: PERMISSIONS.MANAGE_LEAVE,
-    edit: PERMISSIONS.EDIT_LEAVE_DETAILS,
-    delete: PERMISSIONS.DELETE_LEAVE,
-    details: PERMISSIONS.VIEW_LEAVE_DETAILS,
-    approve: PERMISSIONS.APPROVE_LEAVE,
-    reject: PERMISSIONS.REJECT_LEAVE,
+    dashboard: {
+      view: 'DASHBOARD_VIEW'
+    }
   },
   hiring: {
-    jobs: {
-      view: PERMISSIONS.VIEW_JOBS,
-      create: PERMISSIONS.MANAGE_JOBS,
-      edit: PERMISSIONS.EDIT_JOB_DETAILS,
-      delete: PERMISSIONS.DELETE_JOB,
-      details: PERMISSIONS.VIEW_JOB_DETAILS,
+    candidate: {
+      view: PERMISSIONS.CANDIDATE_VIEW,
+      create: PERMISSIONS.CANDIDATE_CREATE,
+      edit: PERMISSIONS.CANDIDATE_EDIT,
+      delete: PERMISSIONS.CANDIDATE_DELETE,
     },
-    candidates: {
-      view: PERMISSIONS.VIEW_CANDIDATES,
-      create: PERMISSIONS.MANAGE_CANDIDATES,
-      edit: PERMISSIONS.EDIT_CANDIDATE_DETAILS,
-      delete: PERMISSIONS.DELETE_CANDIDATE,
-      details: PERMISSIONS.VIEW_CANDIDATE_DETAILS,
+    interview: {
+      view: PERMISSIONS.INTERVIEW_VIEW,
+      create: PERMISSIONS.INTERVIEW_CREATE,
+      edit: PERMISSIONS.INTERVIEW_EDIT,
+      delete: PERMISSIONS.INTERVIEW_DELETE,
     },
-    interviews: {
-      view: PERMISSIONS.VIEW_INTERVIEWS,
-      create: PERMISSIONS.MANAGE_INTERVIEWS,
-      edit: PERMISSIONS.EDIT_INTERVIEW,
-      delete: PERMISSIONS.DELETE_INTERVIEW,
-      details: PERMISSIONS.VIEW_INTERVIEW_DETAILS,
-      schedule: PERMISSIONS.SCHEDULE_INTERVIEW,
+    job: {
+      view: PERMISSIONS.JOB_VIEW,
+      create: PERMISSIONS.JOB_CREATE,
+      edit: PERMISSIONS.JOB_EDIT,
+      delete: PERMISSIONS.JOB_DELETE,
     },
     onboarding: {
-      view: PERMISSIONS.VIEW_ONBOARDING,
-      create: PERMISSIONS.MANAGE_ONBOARDING,
-      edit: PERMISSIONS.EDIT_ONBOARDING_DETAILS,
-      delete: PERMISSIONS.DELETE_ONBOARDING,
-      details: PERMISSIONS.VIEW_ONBOARDING_DETAILS,
-      tasks: PERMISSIONS.MANAGE_ONBOARDING_TASKS,
+      view: PERMISSIONS.ONBOARDING_VIEW,
+      create: PERMISSIONS.ONBOARDING_CREATE,
+      edit: PERMISSIONS.ONBOARDING_EDIT,
+      delete: PERMISSIONS.ONBOARDING_DELETE,
     },
   },
-  projects: {
-    view: PERMISSIONS.VIEW_PROJECTS,
-    create: PERMISSIONS.MANAGE_PROJECTS,
-    edit: PERMISSIONS.EDIT_PROJECT_DETAILS,
-    delete: PERMISSIONS.DELETE_PROJECT,
-    details: PERMISSIONS.VIEW_PROJECT_DETAILS,
-  },
-  tasks: {
-    view: PERMISSIONS.VIEW_TASKS,
-    create: PERMISSIONS.MANAGE_TASKS,
-    edit: PERMISSIONS.EDIT_TASK_DETAILS,
-    delete: PERMISSIONS.DELETE_TASK,
-    details: PERMISSIONS.VIEW_TASK_DETAILS,
-  },
-  sprints: {
-    view: PERMISSIONS.VIEW_SPRINT_DETAILS,
-    create: PERMISSIONS.MANAGE_SPRINTS,
-    edit: PERMISSIONS.EDIT_SPRINT_DETAILS,
-    delete: PERMISSIONS.DELETE_SPRINT,
-    details: PERMISSIONS.VIEW_SPRINT_DETAILS,
-  },
-  timeline: {
-    view: PERMISSIONS.VIEW_TIMELINE,
-    edit: PERMISSIONS.EDIT_TIMELINE,
-  },
-  resources: {
-    view: PERMISSIONS.VIEW_RESOURCES,
-    allocate: PERMISSIONS.ALLOCATE_RESOURCES,
-  },
-  deliverables: {
-    view: PERMISSIONS.VIEW_DELIVERABLES,
-    create: PERMISSIONS.MANAGE_DELIVERABLES,
-    edit: PERMISSIONS.EDIT_DELIVERABLE_DETAILS,
-    delete: PERMISSIONS.DELETE_DELIVERABLE,
-    details: PERMISSIONS.VIEW_DELIVERABLE_DETAILS,
-  },
-  sales: {
-    clients: {
-      view: PERMISSIONS.VIEW_CLIENTS,
-      create: PERMISSIONS.MANAGE_CLIENTS,
-      edit: PERMISSIONS.EDIT_CLIENT_DETAILS,
-      delete: PERMISSIONS.DELETE_CLIENT,
-      details: PERMISSIONS.VIEW_CLIENT_DETAILS,
+  employeemanagement: {
+    employee: {
+      view: PERMISSIONS.EMPLOYEE_VIEW,
+      create: PERMISSIONS.EMPLOYEE_CREATE,
+      edit: PERMISSIONS.EMPLOYEE_EDIT,
+      delete: PERMISSIONS.EMPLOYEE_DELETE,
     },
-    proposals: {
-      view: PERMISSIONS.VIEW_PROPOSALS,
-      create: PERMISSIONS.MANAGE_PROPOSALS,
-      edit: PERMISSIONS.EDIT_PROPOSAL_DETAILS,
-      delete: PERMISSIONS.DELETE_PROPOSAL,
-      details: PERMISSIONS.VIEW_PROPOSAL_DETAILS,
+    department: {
+      view: PERMISSIONS.DEPARTMENT_VIEW,
+      create: PERMISSIONS.DEPARTMENT_CREATE,
+      edit: PERMISSIONS.DEPARTMENT_EDIT,
+      delete: PERMISSIONS.DEPARTMENT_DELETE,
     },
-    contracts: {
-      view: PERMISSIONS.VIEW_CONTRACTS,
-      create: PERMISSIONS.MANAGE_CONTRACTS,
-      edit: PERMISSIONS.EDIT_CONTRACT_DETAILS,
-      delete: PERMISSIONS.DELETE_CONTRACT,
-      details: PERMISSIONS.VIEW_CONTRACT_DETAILS,
+    leave: {
+      view: PERMISSIONS.LEAVE_VIEW,
+      create: PERMISSIONS.LEAVE_CREATE,
+      edit: PERMISSIONS.LEAVE_EDIT,
+      delete: PERMISSIONS.LEAVE_DELETE,
     },
-    deals: {
-      view: PERMISSIONS.VIEW_DEALS,
-      create: PERMISSIONS.MANAGE_DEALS,
-      edit: PERMISSIONS.EDIT_DEAL_DETAILS,
-      delete: PERMISSIONS.DELETE_DEAL,
-      details: PERMISSIONS.VIEW_DEAL_DETAILS,
+    attendence: {
+      view: PERMISSIONS.ATTENDENCE_VIEW,
+      create: PERMISSIONS.ATTENDENCE_CREATE,
+      edit: PERMISSIONS.ATTENDENCE_EDIT,
+      delete: PERMISSIONS.ATTENDENCE_DELETE,
     },
-    analytics: {
-      view: PERMISSIONS.VIEW_ANALYTICS,
-      manage: PERMISSIONS.MANAGE_ANALYTICS,
-    },
-    revenue: {
-      view: PERMISSIONS.VIEW_REVENUE_DETAILS,
-      manage: PERMISSIONS.MANAGE_REVENUE,
-    },
-  },
-  assets: {
-    view: PERMISSIONS.VIEW_ASSETS,
-    create: PERMISSIONS.MANAGE_ASSETS,
-    edit: PERMISSIONS.EDIT_ASSET_DETAILS,
-    delete: PERMISSIONS.DELETE_ASSET,
-    details: PERMISSIONS.VIEW_ASSET_DETAILS,
-  },
-  licenses: {
-    view: PERMISSIONS.VIEW_LICENSES,
-    create: PERMISSIONS.MANAGE_LICENSES,
-    edit: PERMISSIONS.EDIT_LICENSE_DETAILS,
-    delete: PERMISSIONS.DELETE_LICENSE,
-    details: PERMISSIONS.VIEW_LICENSE_DETAILS,
-  },
-  maintenance: {
-    view: PERMISSIONS.VIEW_MAINTENANCE,
-    create: PERMISSIONS.MANAGE_MAINTENANCE,
-    edit: PERMISSIONS.EDIT_MAINTENANCE,
-    delete: PERMISSIONS.DELETE_MAINTENANCE,
-    details: PERMISSIONS.VIEW_MAINTENANCE_DETAILS,
-    schedule: PERMISSIONS.SCHEDULE_MAINTENANCE,
-  },
-  finance: {
-    invoices: {
-      view: PERMISSIONS.VIEW_INVOICES,
-      create: PERMISSIONS.MANAGE_INVOICES,
-      edit: PERMISSIONS.EDIT_INVOICE_DETAILS,
-      delete: PERMISSIONS.DELETE_INVOICE,
-      details: PERMISSIONS.VIEW_INVOICE_DETAILS,
-    },
-    expenses: {
-      view: PERMISSIONS.VIEW_EXPENSES,
-      create: PERMISSIONS.MANAGE_EXPENSES,
-      edit: PERMISSIONS.EDIT_EXPENSE_DETAILS,
-      delete: PERMISSIONS.DELETE_EXPENSE,
-      details: PERMISSIONS.VIEW_EXPENSE_DETAILS,
-    },
-    payroll: {
-      view: PERMISSIONS.VIEW_PAYROLL,
-      create: PERMISSIONS.MANAGE_PAYROLL,
-      edit: PERMISSIONS.EDIT_PAYROLL_DETAILS,
-      delete: PERMISSIONS.DELETE_PAYROLL,
-      details: PERMISSIONS.VIEW_PAYROLL_DETAILS,
-      process: PERMISSIONS.PROCESS_PAYROLL,
-    },
-    reports: {
-      view: PERMISSIONS.VIEW_REPORTS,
-      create: PERMISSIONS.MANAGE_REPORTS,
-      edit: PERMISSIONS.EDIT_REPORT_DETAILS,
-      delete: PERMISSIONS.DELETE_REPORT,
-      details: PERMISSIONS.VIEW_REPORT_DETAILS,
-      generate: PERMISSIONS.GENERATE_REPORTS,
+    performance: {
+      view: PERMISSIONS.PERFORMANCE_VIEW,
+      create: PERMISSIONS.PERFORMANCE_CREATE,
+      edit: PERMISSIONS.PERFORMANCE_EDIT,
+      delete: PERMISSIONS.PERFORMANCE_DELETE,
     },
   },
   settings: {
-    view: PERMISSIONS.VIEW_SETTINGS,
-    manage: PERMISSIONS.MANAGE_SETTINGS,
-    users: PERMISSIONS.MANAGE_USERS,
-    roles: PERMISSIONS.MANAGE_ROLES,
-    companyProfile: {
-      view: PERMISSIONS.VIEW_COMPANY_PROFILE,
-      edit: PERMISSIONS.EDIT_COMPANY_PROFILE,
+    companyprofile: {
+      view: PERMISSIONS.COMPANYPROFILE_VIEW,
+      create: PERMISSIONS.COMPANYPROFILE_CREATE,
+      edit: PERMISSIONS.COMPANYPROFILE_EDIT,
+      delete: PERMISSIONS.COMPANYPROFILE_DELETE,
+    },
+    rolespermisions: {
+      view: PERMISSIONS.ROLESPERMISIONS_VIEW,
+      create: PERMISSIONS.ROLESPERMISIONS_CREATE,
+      edit: PERMISSIONS.ROLESPERMISIONS_EDIT,
+      delete: PERMISSIONS.ROLESPERMISIONS_DELETE,
+    },
+    systemsettings: {
+      view: PERMISSIONS.SYSTEMSETTINGS_VIEW,
+      create: PERMISSIONS.SYSTEMSETTINGS_CREATE,
+      edit: PERMISSIONS.SYSTEMSETTINGS_EDIT,
+      delete: PERMISSIONS.SYSTEMSETTINGS_DELETE,
     },
     rolesDetails: {
-      view: PERMISSIONS.VIEW_ROLES_DETAILS,
-      edit: PERMISSIONS.EDIT_ROLES_DETAILS,
-    },
-    systemSettings: {
-      view: PERMISSIONS.VIEW_SYSTEM_SETTINGS,
-      edit: PERMISSIONS.EDIT_SYSTEM_SETTINGS,
+      view: PERMISSIONS.ROLESDETAILS_VIEW,
+      edit: PERMISSIONS.ROLESDETAILS_EDIT,
     },
   },
 } as const;
 
-// Update ROLE_PERMISSIONS to include EMPLOYEE
+// Update ROLE_PERMISSIONS to include EMPLOYEE with correct permissions
 export let ROLE_PERMISSIONS = {
   ADMIN: Object.values(PERMISSIONS),
   EMPLOYEE: [
-    PERMISSIONS.VIEW_DASHBOARD,
-    PERMISSIONS.VIEW_EMPLOYEES,
-    PERMISSIONS.VIEW_EMPLOYEE_DETAILS,
-    PERMISSIONS.VIEW_ATTENDANCE,
-    PERMISSIONS.VIEW_PERFORMANCE,
-    PERMISSIONS.VIEW_LEAVE,
-    PERMISSIONS.VIEW_PROJECTS,
-    PERMISSIONS.VIEW_PROJECT_DETAILS,
-    PERMISSIONS.VIEW_TASKS,
-    PERMISSIONS.VIEW_TASK_DETAILS,
+    PERMISSIONS.EMPLOYEE_VIEW,
+    PERMISSIONS.DEPARTMENT_VIEW,
+    PERMISSIONS.LEAVE_VIEW,
+    PERMISSIONS.LEAVE_CREATE,
+    PERMISSIONS.ATTENDENCE_VIEW,
+    PERMISSIONS.PERFORMANCE_VIEW,
+    PERMISSIONS.JOB_VIEW,
+    PERMISSIONS.COMPANYPROFILE_VIEW,
   ],
 } as const;
 
@@ -524,16 +285,6 @@ const permissionsArrayToObject = (permissions: string[]): Record<string, any> =>
   }, {} as Record<string, any>);
 };
 
-const loadFromStorage = (key: string) => {
-  try {
-    const item = localStorage.getItem(key);
-    return item ? JSON.parse(item) : null;
-  } catch (error) {
-    console.error(`Error loading ${key} from storage:`, error);
-    return null;
-  }
-};
-
 const saveToStorage = (key: string, value: any) => {
   try {
     localStorage.setItem(key, JSON.stringify(value));
@@ -557,10 +308,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser);
-        // Ensure permissions is always an array
+        // Ensure permissions is a valid object
         const userWithPermissions = {
           ...parsedUser,
-          permissions: Array.isArray(parsedUser.permissions) ? parsedUser.permissions : []
+          permissions: typeof parsedUser.permissions === 'object' && parsedUser.permissions !== null 
+            ? parsedUser.permissions 
+            : {}
         };
         setUser(userWithPermissions);
         setIsAuthenticated(true);
@@ -585,7 +338,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             ...role,
             id: role.id || role._id,
             _id: role._id || role.id,
-            permissions: permissionsObjectToArray(role.permissions)
+            permissions: role.permissions || {} // Keep permissions as an object
           }));
           
           console.log('Processed roles with IDs:', rolesWithIds);
@@ -611,7 +364,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ...role,
           id: role.id || role._id,
           _id: role._id || role.id,
-          permissions: permissionsObjectToArray(role.permissions)
+          permissions: role.permissions || {} // Keep permissions as an object
         }));
         
         console.log('Processed refreshed roles with IDs:', rolesWithIds);
@@ -622,19 +375,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Update the hasPermission function to handle type safety
+  // Update the hasPermission function to handle the new permission structure
   const hasPermission = (permission: string): boolean => {
-    if (!user) return false;
+    if (!isAuthenticated || !user) {
+      return false;
+    }
+
+    if (user.role.toLowerCase() === 'administrator' || user.role.toLowerCase() === 'admin') {
+      return true;
+    }
     
-    // Ensure user.permissions is an array
-    const userPermissions = Array.isArray(user.permissions) ? user.permissions : [];
+    const [module, action] = permission.toLowerCase().split('_');
+    if (!module || !action) return false;
+
+    const [mainModule, subModule] = module.split('.');
     
-    // Check if user has the permission directly
-    if (userPermissions.includes(permission)) return true;
-    
-    // Check if user's role has the permission
-    const rolePermissions = AUTH_ROLE_PERMISSIONS[user.role];
-    return rolePermissions ? rolePermissions.includes(permission) : false;
+    if(user.permissions){
+      if (mainModule && subModule) {
+        return Boolean((user.permissions as any)?.[mainModule]?.[subModule]?.[action]);
+      }
+      return Boolean((user.permissions as any)?.[module]?.[action]);
+    }
+    return false;
+  };
+
+  // New function to check module permissions directly
+  const hasModulePermission = (module: string, action: string): boolean => {
+    if (!isAuthenticated || !user) {
+      return false;
+    }
+
+    if (user.role.toLowerCase() === 'administrator' || user.role.toLowerCase() === 'admin') {
+      return true;
+    }
+
+    const modulePermissions = (user.permissions as any)?.[module];
+    if (!modulePermissions) {
+      return false;
+    }
+
+    // Check if any submodule has the required action permission
+    return Object.values(modulePermissions).some((submodule: any) => {
+      return submodule[action] === true;
+    });
   };
 
   const login = async (email: string, password: string) => {
@@ -646,9 +429,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userObject = {
         id: userData._id,
         email: userData.email,
-        name: `${userData.firstName} ${userData.lastName}`,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
         role: userData.role,
-        permissions: Object.values(PERMISSIONS),
+        permissions: userData.permissions,
       };
       
       // Set user data and authentication state
@@ -660,7 +444,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       toast({
         title: "🎉 Welcome Back!",
-        description: `Hello ${userObject.name}! You've successfully logged into your account.`,
+        description: `Hello ${userObject.firstName} ${userObject.lastName}! You've successfully logged into your account.`,
         duration: 4000,
         className: "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 text-black",
       });
@@ -703,12 +487,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
         setUsers(prevUsers => [...prevUsers, newUser]);
 
+        // Convert permissions array to UserPermissions object
+        const permissionsObject = permissionService.convertArrayToPermissions(newUser.permissions || []);
+
         const registeredUser: User = {
           id: newUser.id,
           email: newUser.email,
-          name: newUser.name,
+          firstName: newUser.name.split(' ')[0],
+          lastName: newUser.name.split(' ')[1],
           role: newUser.role,
-          permissions: Array.isArray(newUser.permissions) ? newUser.permissions : [],
+          permissions: permissionsObject,
         };
 
         setUser(registeredUser);
@@ -753,20 +541,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user?.id === userId) {
       setUser(prevUser => {
         if (!prevUser) return null;
+        // Convert permissions array to UserPermissions object
+        const rolePermissions = AUTH_ROLE_PERMISSIONS[newRole] || [];
+        const permissionsObject = permissionService.convertArrayToPermissions(rolePermissions);
         return {
           ...prevUser,
           role: newRole,
-          permissions: Array.isArray(AUTH_ROLE_PERMISSIONS[newRole]) ? AUTH_ROLE_PERMISSIONS[newRole] : []
+          permissions: permissionsObject
         };
       });
     }
   };
 
-  const updateUserPermissions = (permissions: string[]) => {
+  const updateUserPermissions = (permissions: UserPermissions) => {
     setUser(prevUser => {
       if (!prevUser) return null;
-      // Ensure permissions is always an array
-      const safePermissions = Array.isArray(permissions) ? permissions : [];
+      // Ensure permissions is always a UserPermissions object
+      const safePermissions = permissions || {
+        hiring: {
+          candidate: { view: false, create: false, edit: false, delete: false },
+          interview: { view: false, create: false, edit: false, delete: false },
+          job: { view: false, create: false, edit: false, delete: false },
+          onboarding: { view: false, create: false, edit: false, delete: false }
+        },
+        employeemanagement: {
+          employee: { view: false, create: false, edit: false, delete: false },
+          department: { view: false, create: false, edit: false, delete: false },
+          leave: { view: false, create: false, edit: false, delete: false },
+          attendence: { view: false, create: false, edit: false, delete: false },
+          performance: { view: false, create: false, edit: false, delete: false }
+        },
+        settings: {
+          companyprofile: { view: false, create: false, edit: false, delete: false },
+          rolespermisions: { view: false, create: false, edit: false, delete: false },
+          systemsettings: { view: false, create: false, edit: false, delete: false },
+          rolesDetails: { view: false, edit: false }
+        }
+      };
       const updatedUser = {
         ...prevUser,
         permissions: safePermissions
@@ -793,30 +604,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('Original role name:', role.name);
       console.log('Backend returned role name:', newRole.name);
       
-      // Ensure the new role has proper ID fields and convert permissions back to array for frontend
-      const roleWithIds = {
-        ...newRole,
-        id: newRole.id || newRole._id,
-        _id: newRole._id || newRole.id,
-        permissions: permissionsObjectToArray(newRole.permissions)
-      };
-      
       // Use the original role name if backend doesn't return it
-      const finalRoleName = roleWithIds.name || role.name;
+      const finalRoleName = newRole.name || role.name;
       console.log('Final role name for toast:', finalRoleName);
-      
-      setRoles(prev => [...prev, roleWithIds]);
       
       // Refresh roles from backend to ensure consistency
       await refreshRoles();
       
       // Dispatch custom event to notify UI about role creation
       window.dispatchEvent(new CustomEvent('rolesUpdated', {
-        detail: { action: 'created', roleName: finalRoleName, roleId: roleWithIds.id }
+        detail: { action: 'created', roleName: finalRoleName, roleId: newRole.id || newRole._id }
       }));
       
       window.dispatchEvent(new CustomEvent('permissionsUpdated', {
-        detail: { roleName: finalRoleName, permissions: roleWithIds.permissions }
+        detail: { roleName: finalRoleName, permissions: newRole.permissions }
       }));
       
       toast({
@@ -850,7 +651,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Update role using backend
-  const updateRole = async (roleName: string, permissions: string[]) => {
+  const updateRole = useCallback(async (roleName: string, permissions: UserPermissions) => {
     try {
       const role = roles.find(r => r.name === roleName);
       if (!role) {
@@ -878,24 +679,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       
-      // Convert permissions array to the format expected by the backend
-      const permissionsObject = permissionsArrayToObject(permissions);
+      const permissionsObject = permissions;
       
       const updatedRole = await roleService.updateRole(roleId, { permissions: permissionsObject });
-      
-      // Convert permissions back to array for frontend
-      const updatedRoleWithArrayPermissions = {
-        ...updatedRole,
-        permissions: permissionsObjectToArray(updatedRole.permissions)
-      };
-      
-      setRoles(prev => prev.map(r => (r.id || r._id) === updatedRole.id ? updatedRoleWithArrayPermissions : r));
       
       // Refresh roles from backend to ensure consistency
       await refreshRoles();
       
       window.dispatchEvent(new CustomEvent('permissionsUpdated', {
-        detail: { roleName: updatedRole.name, permissions: updatedRoleWithArrayPermissions.permissions }
+        detail: { roleName: updatedRole.name, permissions: updatedRole.permissions }
       }));
       
       toast({
@@ -925,7 +717,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Re-throw the error so the calling component can handle it
       throw err;
     }
-  };
+  }, [roles, toast]);
 
   // Delete role using backend
   const deleteRole = async (roleName: string) => {
@@ -1021,12 +813,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const updated = { ...prev, [userId]: roleName };
       saveToStorage(STORAGE_KEYS.USER_ROLES, updated);
       
-      // Update user's permissions
-      const rolePermissions = AUTH_ROLE_PERMISSIONS[roleName] || [];
+      // Get the full permissions object for the assigned role
+      const role = roles.find(r => r.name === roleName);
+      const permissionsObject = role ? role.permissions : {};
+      
       setUsers(prevUsers => 
         prevUsers.map(user => 
           user.id === userId 
-            ? { ...user, role: roleName, permissions: rolePermissions }
+            ? { ...user, role: roleName, permissions: permissionService.convertPermissionsToArray(permissionsObject as UserPermissions) } // Mock user permissions are flat array
             : user
         )
       );
@@ -1038,7 +832,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const updatedUser = {
             ...prevUser,
             role: roleName,
-            permissions: rolePermissions
+            permissions: permissionsObject as UserPermissions
           };
           // Update localStorage to persist the changes
           localStorage.setItem('currentUser', JSON.stringify(updatedUser));
@@ -1048,7 +842,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Force a re-render of components that depend on permissions
       window.dispatchEvent(new CustomEvent('permissionsUpdated', {
-        detail: { roleName, permissions: rolePermissions }
+        detail: { roleName, permissions: permissionsObject }
       }));
       
       return updated;
@@ -1062,12 +856,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       delete updated[userId];
       saveToStorage(STORAGE_KEYS.USER_ROLES, updated);
       
-      // Reset user's permissions to default
-      const defaultPermissions = AUTH_ROLE_PERMISSIONS.EMPLOYEE;
+      // Reset user's permissions to a default role (e.g., 'Employee')
+      const defaultRole = roles.find(r => r.name === 'Employee');
+      const defaultPermissionsObject = defaultRole ? defaultRole.permissions : {};
+      
       setUsers(prevUsers => 
         prevUsers.map(user => 
           user.id === userId 
-            ? { ...user, role: 'EMPLOYEE', permissions: defaultPermissions }
+            ? { ...user, role: 'Employee', permissions: permissionService.convertPermissionsToArray(defaultPermissionsObject as UserPermissions) }
             : user
         )
       );
@@ -1078,8 +874,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (!prevUser) return null;
           const updatedUser = {
             ...prevUser,
-            role: 'EMPLOYEE',
-            permissions: defaultPermissions
+            role: 'Employee',
+            permissions: defaultPermissionsObject as UserPermissions
           };
           // Update localStorage to persist the changes
           localStorage.setItem('currentUser', JSON.stringify(updatedUser));
@@ -1089,7 +885,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Force a re-render of components that depend on permissions
       window.dispatchEvent(new CustomEvent('permissionsUpdated', {
-        detail: { roleName: 'EMPLOYEE', permissions: defaultPermissions }
+        detail: { roleName: 'Employee', permissions: defaultPermissionsObject }
       }));
       
       return updated;
@@ -1106,7 +902,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (!prevUser) return null;
           return {
             ...prevUser,
-            permissions: [...permissions]
+            permissions: permissions
           };
         });
       }
@@ -1125,6 +921,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     register,
     logout,
     hasPermission,
+    hasModulePermission,
     updateUserRole,
     updateUserPermissions,
     users,

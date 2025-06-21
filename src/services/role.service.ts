@@ -1,5 +1,6 @@
 import axiosInstance from '../lib/axios';
 import { Role, User } from '../types/models';
+import { UserPermissions } from './permission.service';
 
 interface RoleListData {
   data: Role[];
@@ -8,23 +9,27 @@ interface RoleListData {
   pageSize: number;
 }
 
-export interface RoleListResponse {
+interface RoleListResponse {
   statusCode: number;
   message: string;
   data: RoleListData;
 }
 
-export interface UserListResponse {
-  data: User[];
-  total: number;
-  page: number;
-  pageSize: number;
+interface UserListResponse {
+  statusCode: number;
+  message: string;
+  data: {
+    data: User[];
+    total: number;
+    page: number;
+    pageSize: number;
+  };
 }
 
-export interface DeleteRoleResponse {
+interface DeleteRoleResponse {
   success: boolean;
   message: string;
-  deletedRole?: Role;
+  deletedRole?: any;
 }
 
 export const roleService = {
@@ -112,4 +117,16 @@ export const roleService = {
     const response = await axiosInstance.get<UserListResponse>('/users', { params });
     return response.data;
   },
+
+  // Get permissions for a specific role
+  getRolePermissions: async (roleId: string): Promise<UserPermissions> => {
+    const response = await axiosInstance.get<UserPermissions>(`/permissions/role/${roleId}`);
+    return response.data;
+  },
+
+  // Update role permissions
+  updateRolePermissions: async (roleId: string, permissions: UserPermissions): Promise<Role> => {
+    const response = await axiosInstance.patch<Role>(`/roles/${roleId}/permissions`, { permissions });
+    return response.data;
+  }
 };

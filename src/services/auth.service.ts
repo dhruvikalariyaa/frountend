@@ -1,8 +1,14 @@
 import axiosInstance from '../lib/axios';
+import { UserPermissions } from './permission.service';
 
 interface LoginCredentials {
   email: string;
   password: string;
+}
+
+interface RefreshTokenResponse {
+  token: string;
+  refreshToken: string;
 }
 
 interface UserData {
@@ -11,6 +17,7 @@ interface UserData {
   firstName: string;
   lastName: string;
   role: string;
+  permissions: UserPermissions;
 }
 
 interface LoginData {
@@ -23,11 +30,6 @@ interface LoginResponse {
   statusCode: number;
   message: string;
   data: LoginData;
-}
-
-interface RefreshTokenResponse {
-  token: string;
-  refreshToken: string;
 }
 
 export const authService = {

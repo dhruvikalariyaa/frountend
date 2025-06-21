@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
-import { AuthProvider, useAuth, PERMISSIONS } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth, PERMISSIONS } from "./contexts/AuthContext";
 import PermissionGuard from "@/components/PermissionGuard";
 import Login from "./pages/Login";
 import Layout from "./components/Layout";
@@ -49,7 +49,7 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={
-          <PermissionGuard requiredPermission={PERMISSIONS.VIEW_DASHBOARD}>
+          <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEE_VIEW}>
             <Dashboard />
           </PermissionGuard>
         } />
@@ -57,27 +57,27 @@ function AppRoutes() {
         {/* Employee Management Routes */}
         <Route path="employees">
           <Route index element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_EMPLOYEES}>
+            <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEE_VIEW}>
               <Employees />
             </PermissionGuard>
           } />
           <Route path="departments" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_DEPARTMENTS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.DEPARTMENT_VIEW}>
               <Departments />
             </PermissionGuard>
           } />
           <Route path="attendance" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_ATTENDANCE}>
+            <PermissionGuard requiredPermission={PERMISSIONS.ATTENDENCE_VIEW}>
               <Attendance />
             </PermissionGuard>
           } />
           <Route path="performance" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_PERFORMANCE}>
+            <PermissionGuard requiredPermission={PERMISSIONS.PERFORMANCE_VIEW}>
               <Performance />
             </PermissionGuard>
           } />
           <Route path="leaves" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_ATTENDANCE}>
+            <PermissionGuard requiredPermission={PERMISSIONS.LEAVE_VIEW}>
               <LeaveManagement />
             </PermissionGuard>
           } />
@@ -86,22 +86,22 @@ function AppRoutes() {
         {/* Hiring Management Routes */}
         <Route path="hiring">
           <Route path="candidates" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_CANDIDATES}>
+            <PermissionGuard requiredPermission={PERMISSIONS.CANDIDATE_VIEW}>
               <Candidates />
             </PermissionGuard>
           } />
           <Route path="jobs" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_JOBS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.JOB_VIEW}>
               <Jobs />
             </PermissionGuard>
           } />
           <Route path="interviews" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_INTERVIEWS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.INTERVIEW_VIEW}>
               <Interviews />
             </PermissionGuard>
           } />
           <Route path="onboarding" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_ONBOARDING}>
+            <PermissionGuard requiredPermission={PERMISSIONS.ONBOARDING_VIEW}>
               <Onboarding />
             </PermissionGuard>
           } />
@@ -110,32 +110,32 @@ function AppRoutes() {
         {/* Project Management Routes */}
         <Route path="projects">
           <Route index element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_PROJECTS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEE_VIEW}>
               <Projects />
             </PermissionGuard>
           } />
           <Route path="tasks" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_PROJECTS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEE_VIEW}>
               <Tasks />
             </PermissionGuard>
           } />
           <Route path="sprints" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_PROJECTS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEE_VIEW}>
               <Sprints />
             </PermissionGuard>
           } />
           <Route path="timeline" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_PROJECTS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEE_VIEW}>
               <Timeline />
             </PermissionGuard>
           } />
           <Route path="resources" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_PROJECTS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEE_VIEW}>
               <Resources />
             </PermissionGuard>
           } />
           <Route path="deliverables" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_PROJECTS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEE_VIEW}>
               <Deliverables />
             </PermissionGuard>
           } />
@@ -144,27 +144,27 @@ function AppRoutes() {
         {/* Sales & Clients Routes */}
         <Route path="sales">
           <Route index element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_CLIENTS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEE_VIEW}>
               <Clients />
             </PermissionGuard>
           } />
           <Route path="clients" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_CLIENTS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEE_VIEW}>
               <Clients />
             </PermissionGuard>
           } />
           <Route path="proposals" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_PROPOSALS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEE_VIEW}>
               <Proposals />
             </PermissionGuard>
           } />
           <Route path="contracts" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_CONTRACTS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEE_VIEW}>
               <Contracts />
             </PermissionGuard>
           } />
           <Route path="revenue" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_REPORTS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEE_VIEW}>
               <Revenue />
             </PermissionGuard>
           } />
@@ -173,17 +173,17 @@ function AppRoutes() {
         {/* Asset Management Routes */}
         <Route path="assets">
           <Route index element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_SETTINGS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.SYSTEMSETTINGS_VIEW}>
               <Assets />
             </PermissionGuard>
           } />
           <Route path="licenses" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_SETTINGS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.SYSTEMSETTINGS_VIEW}>
               <Licenses />
             </PermissionGuard>
           } />
           <Route path="maintenance" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_SETTINGS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.SYSTEMSETTINGS_VIEW}>
               <Maintenance />
             </PermissionGuard>
           } />
@@ -192,27 +192,27 @@ function AppRoutes() {
         {/* Finance Routes */}
         <Route path="finance">
           <Route index element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_INVOICES}>
+            <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEE_VIEW}>
               <Invoices />
             </PermissionGuard>
           } />
           <Route path="invoices" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_INVOICES}>
+            <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEE_VIEW}>
               <Invoices />
             </PermissionGuard>
           } />
           <Route path="expenses" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_EXPENSES}>
+            <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEE_VIEW}>
               <Expenses />
             </PermissionGuard>
           } />
           <Route path="payroll" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_PAYROLL}>
+            <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEE_VIEW}>
               <Payroll />
             </PermissionGuard>
           } />
           <Route path="reports" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_REPORTS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEE_VIEW}>
               <Reports />
             </PermissionGuard>
           } />
@@ -221,22 +221,22 @@ function AppRoutes() {
         {/* Settings Routes */}
         <Route path="settings">
           <Route index element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_SETTINGS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.COMPANYPROFILE_VIEW}>
               <CompanyProfile />
             </PermissionGuard>
           } />
           <Route path="company" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.VIEW_SETTINGS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.COMPANYPROFILE_VIEW}>
               <CompanyProfile />
             </PermissionGuard>
           } />
           <Route path="roles" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.MANAGE_ROLES}>
+            <PermissionGuard requiredPermission={PERMISSIONS.ROLESPERMISIONS_VIEW}>
               <RolesPermissions />
             </PermissionGuard>
           } />
           <Route path="system" element={
-            <PermissionGuard requiredPermission={PERMISSIONS.MANAGE_SETTINGS}>
+            <PermissionGuard requiredPermission={PERMISSIONS.SYSTEMSETTINGS_VIEW}>
               <SystemSettings />
             </PermissionGuard>
           } />
