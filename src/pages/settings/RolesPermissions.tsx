@@ -457,14 +457,15 @@ const RoleTable = React.memo(({
 }) => {
   const filteredRoles = useMemo(() => 
     roles.filter(role =>
-      role.name.toLowerCase().includes(roleSearchTerm.toLowerCase()) ||
-      (role.description && role.description.toLowerCase().includes(roleSearchTerm.toLowerCase()))
+      (role.name?.toLowerCase() || '').includes(roleSearchTerm.toLowerCase()) ||
+      (role.description?.toLowerCase() || '').includes(roleSearchTerm.toLowerCase())
     ),
     [roles, roleSearchTerm]
   );
 
   // Check if a role is a system role
   const isSystemRole = (roleName: string) => {
+    if (!roleName) return false;
     const systemRoles = ['Administrator', 'Admin'];
     return systemRoles.some(r => r.toLowerCase() === roleName.toLowerCase());
   };
@@ -605,6 +606,16 @@ const RoleTable = React.memo(({
 
 RoleTable.displayName = 'RoleTable';
 
+// Helper function to ensure permissions are always an array
+const ensurePermissionsArray = (permissions: any): string[] => {
+  if (!permissions) return [];
+  if (Array.isArray(permissions)) return permissions;
+  if (typeof permissions === 'object') {
+    return Object.keys(permissions).filter(key => permissions[key] === true);
+  }
+  return [];
+};
+
 export default function RolesPermissions() {
   const { toast } = useToast();
   const {
@@ -706,9 +717,10 @@ export default function RolesPermissions() {
     const role = roles.find(r => r.name === roleName);
     if (!role) return;
 
+    const rolePermissions = ensurePermissionsArray(role.permissions);
     const updatedPermissions = checked
-      ? [...(role.permissions || []), permission]
-      : (role.permissions || []).filter(p => p !== permission);
+      ? [...rolePermissions, permission]
+      : rolePermissions.filter(p => p !== permission);
 
     updateRole(roleName, updatedPermissions);
     
@@ -721,7 +733,7 @@ export default function RolesPermissions() {
         changes: [
           {
             field: 'permissions',
-            oldValue: role.permissions || [],
+            oldValue: rolePermissions,
             newValue: updatedPermissions
           }
         ],
@@ -782,11 +794,16 @@ export default function RolesPermissions() {
 
     setIsLoading(true);
     try {
+      console.log('Creating role with name:', newRoleName);
+      console.log('Creating role with permissions:', newRolePermissions);
+      
       await createRole({
         name: newRoleName,
         permissions: newRolePermissions,
         description: `Custom role: ${newRoleName}`,
       });
+
+      console.log('Role creation completed successfully');
 
       // Add to history
       setRoleHistory(prev => [
@@ -809,16 +826,9 @@ export default function RolesPermissions() {
 
       setNewRoleName('');
       setNewRolePermissions([]);
-      toast({
-        title: "Success",
-        description: "New role created successfully.",
-      });
+      // Success toast is now handled by AuthContext
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to create role. Please try again.",
-        variant: "destructive",
-      });
+      // Error toast is now handled by AuthContext
     } finally {
       setIsLoading(false);
     }
@@ -866,7 +876,7 @@ export default function RolesPermissions() {
             changes: [
               {
                 field: 'permissions',
-                oldValue: roleToDeleteObj.permissions || [],
+                oldValue: ensurePermissionsArray(roleToDeleteObj.permissions),
                 newValue: []
               }
             ],
@@ -941,7 +951,10 @@ export default function RolesPermissions() {
       return;
     }
 
-    setRoleToAssignUser(role);
+    setRoleToAssignUser({
+      ...role,
+      permissions: ensurePermissionsArray(role.permissions)
+    });
     setIsAssignUserDialogOpen(true);
     setUserSearchTerm('');
   }, [hasPermission, toast]);
@@ -1199,10 +1212,16 @@ export default function RolesPermissions() {
                   <RoleTable
                     roles={roles}
                     users={users}
-                    onEdit={setSelectedRole}
+                    onEdit={(role) => setSelectedRole({
+                      ...role,
+                      permissions: ensurePermissionsArray(role.permissions)
+                    })}
                     onDelete={handleDeleteRole}
                     onAssignUser={handleOpenAssignUserDialog}
-                    onViewUsers={setViewUsersRole}
+                    onViewUsers={(role) => setViewUsersRole({
+                      ...role,
+                      permissions: ensurePermissionsArray(role.permissions)
+                    })}
                     hasPermission={hasPermission}
                     roleSearchTerm={roleSearchTerm}
                     selectedRoles={selectedRoles}
@@ -1443,7 +1462,7 @@ export default function RolesPermissions() {
                                     <span className="text-muted-foreground">
                                       {change.field === 'permissions' ? (
                                         <span>
-                                          {change.oldValue.length} → {change.newValue.length} permissions
+                                          {ensurePermissionsArray(change.oldValue).length} → {ensurePermissionsArray(change.newValue).length} permissions
                                         </span>
                                       ) : (
                                         <span>
@@ -1540,7 +1559,7 @@ export default function RolesPermissions() {
                   </SelectTrigger>
                   <SelectContent>
                     {roles.map((role) => (
-                      <SelectItem key={role.name} value={role.name}>
+                      <SelectItem key={`${role.id || role._id}-${role.name}`} value={role.name}>
                         {role.name}
                       </SelectItem>
                     ))}
@@ -1555,7 +1574,7 @@ export default function RolesPermissions() {
                   </SelectTrigger>
                   <SelectContent>
                     {roles.map((role) => (
-                      <SelectItem key={role.name} value={role.name}>
+                      <SelectItem key={`${role.id || role._id}-${role.name}`} value={role.name}>
                         {role.name}
                       </SelectItem>
                     ))}
@@ -1584,8 +1603,8 @@ export default function RolesPermissions() {
                             {permissions.map((permission) => {
                               const role1 = roles.find(r => r.name === rolesToCompare[0]);
                               const role2 = roles.find(r => r.name === rolesToCompare[1]);
-                              const hasPermission1 = (role1?.permissions || []).includes(permission);
-                              const hasPermission2 = (role2?.permissions || []).includes(permission);
+                              const hasPermission1 = ensurePermissionsArray(role1?.permissions).includes(permission);
+                              const hasPermission2 = ensurePermissionsArray(role2?.permissions).includes(permission);
 
                               return (
                                 <TableRow key={permission}>
@@ -1659,11 +1678,11 @@ export default function RolesPermissions() {
                               <Checkbox
                                 id={`select-all-${category}-edit`}
                                 checked={permissions.every(permission => 
-                                  (selectedRole.permissions || []).includes(permission)
+                                  ensurePermissionsArray(selectedRole.permissions).includes(permission)
                                 )}
                                 onCheckedChange={(checked: boolean) => {
                                   if (checked) {
-                                    const newPermissions = [...(selectedRole.permissions || [])];
+                                    const newPermissions = [...ensurePermissionsArray(selectedRole.permissions)];
                                     (permissions as string[]).forEach(permission => {
                                       if (!newPermissions.includes(permission)) {
                                         newPermissions.push(permission);
@@ -1677,7 +1696,7 @@ export default function RolesPermissions() {
                                       handlePermissionChange(selectedRole.name, permission, true);
                                     });
                                   } else {
-                                    const newPermissions = (selectedRole.permissions || []).filter(
+                                    const newPermissions = ensurePermissionsArray(selectedRole.permissions).filter(
                                       p => !(permissions as string[]).includes(p)
                                     );
                                     setSelectedRole(prev => {
@@ -1705,14 +1724,14 @@ export default function RolesPermissions() {
                             <div key={permission} className="flex items-center space-x-3 p-2 rounded-md hover:bg-muted/50 transition-colors">
                               <Checkbox 
                                 id={`${selectedRole.name}-${permission}`}
-                                checked={(selectedRole.permissions || []).includes(permission)}
+                                checked={ensurePermissionsArray(selectedRole.permissions).includes(permission)}
                                 onCheckedChange={(checked: boolean) => {
                                   handlePermissionChange(selectedRole.name, permission, checked);
                                   setSelectedRole(prev => {
                                     if (!prev) return null;
                                     const updatedPermissions = checked
-                                      ? [...(prev.permissions || []), permission]
-                                      : (prev.permissions || []).filter(p => p !== permission);
+                                      ? [...ensurePermissionsArray(prev.permissions), permission]
+                                      : ensurePermissionsArray(prev.permissions).filter(p => p !== permission);
                                     return { ...prev, permissions: updatedPermissions };
                                   });
                                 }}
@@ -1745,7 +1764,7 @@ export default function RolesPermissions() {
                   onClick={() => {
                     if (selectedRole) {
                       // Update all permissions for the role
-                      updateRole(selectedRole.name, selectedRole.permissions || []);
+                      updateRole(selectedRole.name, ensurePermissionsArray(selectedRole.permissions));
                       
                       // Add to history
                       setRoleHistory(prev => [
@@ -1756,8 +1775,8 @@ export default function RolesPermissions() {
                           changes: [
                             {
                               field: 'permissions',
-                              oldValue: roles.find(r => r.name === selectedRole.name)?.permissions || [],
-                              newValue: selectedRole.permissions || []
+                              oldValue: ensurePermissionsArray(roles.find(r => r.name === selectedRole.name)?.permissions),
+                              newValue: ensurePermissionsArray(selectedRole.permissions)
                             }
                           ],
                           timestamp: new Date().toISOString(),
