@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,12 +18,11 @@ import {
   Plus,
   Pencil,
   Trash2,
-  GitCompare,
   History,
   UserCheck,
   UserPlus,
-  AlertTriangle,
-  Check
+  Check,
+  RefreshCw
 } from 'lucide-react';
 import {
   Dialog,
@@ -36,19 +35,63 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAuth, MockUser } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { COMPONENT_PERMISSIONS } from '@/constants/componentPermissions';
 import { Role } from '@/types/models';
-import { UserPermissions } from '@/services/permission.service';
+import { UserPermissions, permissionService, GroupedPermissionsResponse } from '@/services/permission.service';
+import { roleService } from '@/services/role.service';
+import { performanceService, usePerformanceTracking } from '@/services/performance.service';
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { cn } from '@/lib/utils';
+// 🔥 BOOLEAN UTILITY: Helper function to ensure strict boolean values throughout the component
+const toBooleanStrict = (value: any): boolean => {
+  // Handle explicit true values
+  if (value === true || value === 'true' || value === 1 || value === '1') {
+    return true;
+  }
+  // Handle explicit false values
+  if (value === false || value === 'false' || value === 0 || value === '0' || value === null || value === undefined || value === '') {
+    return false;
+  }
+  // For any other value, convert to boolean but only log in development
+  if (process.env.NODE_ENV === 'development') {
+    console.warn('⚠️ Non-boolean value detected in permissions:', value, 'Type:', typeof value, 'Converting to:', Boolean(value));
+  }
+  return Boolean(value);
+};
+
+// 🔥 BOOLEAN VALIDATION: Helper to validate permission objects
+const validatePermissionStructure = (permissions: any): boolean => {
+  if (!permissions || typeof permissions !== 'object') {
+    return false;
+  }
+  
+  try {
+    Object.values(permissions).forEach((module: any) => {
+      if (module && typeof module === 'object') {
+        Object.values(module).forEach((submodule: any) => {
+          if (submodule && typeof submodule === 'object') {
+            Object.values(submodule).forEach((permission: any) => {
+              if (typeof permission !== 'boolean' && process.env.NODE_ENV === 'development') {
+                console.warn('⚠️ Non-boolean permission value found:', permission, 'Type:', typeof permission);
+              }
+            });
+          }
+        });
+      }
+    });
+    return true;
+  } catch (error) {
+    console.error('❌ Error validating permission structure:', error);
+    return false;
+  }
+};
 
 interface RoleTemplate {
   id: string;
@@ -71,40 +114,33 @@ interface RoleHistory {
   user: string;
 }
 
-// Define permission groups based on the new API structure
+// Define permission groups based on the backend API structure
 const permissionGroups = {
-  dashboard: {
-    description: 'Dashboard',
+  employee_management: {
+    description: 'Employee Management',
     modules: {
-      dashboard: 'Dashboard Access'
+      employees: 'Employee Management',
+      department: 'Department Management'
     }
   },
   hiring: {
     description: 'Hiring Management',
     modules: {
       candidate: 'Candidate Management',
-      interview: 'Interview Management',
-      job: 'Job Management',
-      onboarding: 'Onboarding Management'
-    }
-  },
-  employeemanagement: {
-    description: 'Employee Management',
-    modules: {
-      employee: 'Employee Management',
-      department: 'Department Management',
-      leave: 'Leave Management',
-      attendence: 'Attendance Management',
-      performance: 'Performance Management'
+      job: 'Job Management'
     }
   },
   settings: {
     description: 'Settings',
     modules: {
-      companyprofile: 'Company Profile',
-      rolespermisions: 'Roles & Permissions',
-      systemsettings: 'System Settings',
-      rolesDetails: 'Role Details'
+      user: 'User Management',
+      role: 'Role Management'
+    }
+  },
+  system: {
+    description: 'System',
+    modules: {
+      system: 'System Administration'
     }
   }
 };
@@ -112,29 +148,24 @@ const permissionGroups = {
 // Role templates with the new permission structure
 const ROLE_TEMPLATES: RoleTemplate[] = [
   {
-    id: 'administrator',
-    name: 'Administrator',
+    id: 'super_admin',
+    name: 'Super Admin',
     description: 'Full system access with all permissions',
     permissions: {
-      dashboard: { dashboard: { view: true } },
+      employee_management: {
+        employees: { view: true, create: true, edit: true, delete: true },
+        department: { manage: true }
+      },
       hiring: {
         candidate: { view: true, create: true, edit: true, delete: true },
-        interview: { view: true, create: true, edit: true, delete: true },
-        job: { view: true, create: true, edit: true, delete: true },
-        onboarding: { view: true, create: true, edit: true, delete: true }
-      },
-      employeemanagement: {
-        employee: { view: true, create: true, edit: true, delete: true },
-        department: { view: true, create: true, edit: true, delete: true },
-        leave: { view: true, create: true, edit: true, delete: true },
-        attendence: { view: true, create: true, edit: true, delete: true },
-        performance: { view: true, create: true, edit: true, delete: true }
+        job: { view: true, edit: true, delete: true, post: true }
       },
       settings: {
-        companyprofile: { view: true, create: true, edit: true, delete: true },
-        rolespermisions: { view: true, create: true, edit: true, delete: true },
-        systemsettings: { view: true, create: true, edit: true, delete: true },
-        rolesDetails: { view: true, edit: true }
+        user: { view: true, create: true, edit: true, delete: true },
+        role: { view: true, create: true, edit: true, delete: true }
+      },
+      system: {
+        system: { admin: true }
       }
     },
     category: 'System'
@@ -144,25 +175,20 @@ const ROLE_TEMPLATES: RoleTemplate[] = [
     name: 'HR Manager',
     description: 'Complete HR management and oversight',
     permissions: {
-      dashboard: { dashboard: { view: true } },
-      hiring: {
-        candidate: { view: true, create: true, edit: true, delete: true },
-        interview: { view: true, create: true, edit: true, delete: true },
-        job: { view: true, create: true, edit: true, delete: true },
-        onboarding: { view: true, create: true, edit: true, delete: true }
+      employee_management: {
+        employees: { view: true, create: true, edit: true, delete: false },
+        department: { manage: true }
       },
-      employeemanagement: {
-        employee: { view: true, create: true, edit: true, delete: false },
-        department: { view: true, create: false, edit: false, delete: false },
-        leave: { view: true, create: false, edit: true, delete: false },
-        attendence: { view: true, create: false, edit: false, delete: false },
-        performance: { view: true, create: false, edit: true, delete: false }
+      hiring: {
+        candidate: { view: true, create: true, edit: true, delete: false },
+        job: { view: true, edit: true, delete: false, post: true }
       },
       settings: {
-        companyprofile: { view: true, create: false, edit: false, delete: false },
-        rolespermisions: { view: false, create: false, edit: false, delete: false },
-        systemsettings: { view: false, create: false, edit: false, delete: false },
-        rolesDetails: { view: false, edit: false }
+        user: { view: true, create: false, edit: false, delete: false },
+        role: { view: true, create: false, edit: false, delete: false }
+      },
+      system: {
+        system: { admin: false }
       }
     },
     category: 'HR'
@@ -172,25 +198,20 @@ const ROLE_TEMPLATES: RoleTemplate[] = [
     name: 'Employee',
     description: 'Basic employee access',
     permissions: {
-      dashboard: { dashboard: { view: true } },
+      employee_management: {
+        employees: { view: false, create: false, edit: false, delete: false },
+        department: { manage: false }
+      },
       hiring: {
         candidate: { view: false, create: false, edit: false, delete: false },
-        interview: { view: false, create: false, edit: false, delete: false },
-        job: { view: true, create: false, edit: false, delete: false },
-        onboarding: { view: false, create: false, edit: false, delete: false }
-      },
-      employeemanagement: {
-        employee: { view: false, create: false, edit: false, delete: false },
-        department: { view: true, create: false, edit: false, delete: false },
-        leave: { view: true, create: true, edit: false, delete: false },
-        attendence: { view: true, create: false, edit: false, delete: false },
-        performance: { view: true, create: false, edit: false, delete: false }
+        job: { view: true, edit: false, delete: false, post: false }
       },
       settings: {
-        companyprofile: { view: true, create: false, edit: false, delete: false },
-        rolespermisions: { view: false, create: false, edit: false, delete: false },
-        systemsettings: { view: false, create: false, edit: false, delete: false },
-        rolesDetails: { view: false, edit: false }
+        user: { view: false, create: false, edit: false, delete: false },
+        role: { view: false, create: false, edit: false, delete: false }
+      },
+      system: {
+        system: { admin: false }
       }
     },
     category: 'Basic'
@@ -198,29 +219,232 @@ const ROLE_TEMPLATES: RoleTemplate[] = [
 ];
 
 const ALL_POSSIBLE_PERMISSIONS: UserPermissions = {
-  dashboard: {
-    dashboard: { view: false }
+  employee_management: {
+    employees: { view: false, create: false, edit: false, delete: false },
+    department: { manage: false }
   },
   hiring: {
     candidate: { view: false, create: false, edit: false, delete: false },
-    interview: { view: false, create: false, edit: false, delete: false },
-    job: { view: false, create: false, edit: false, delete: false },
-    onboarding: { view: false, create: false, edit: false, delete: false }
-  },
-  employeemanagement: {
-    employee: { view: false, create: false, edit: false, delete: false },
-    department: { view: false, create: false, edit: false, delete: false },
-    leave: { view: false, create: false, edit: false, delete: false },
-    attendence: { view: false, create: false, edit: false, delete: false },
-    performance: { view: false, create: false, edit: false, delete: false }
+    job: { view: false, edit: false, delete: false, post: false }
   },
   settings: {
-    companyprofile: { view: false, create: false, edit: false, delete: false },
-    rolespermisions: { view: false, create: false, edit: false, delete: false },
-    systemsettings: { view: false, create: false, edit: false, delete: false },
-    rolesDetails: { view: false, edit: false }
+    user: { view: false, create: false, edit: false, delete: false },
+    role: { view: false, create: false, edit: false, delete: false }
+  },
+  system: {
+    system: { admin: false }
   }
 };
+
+// 🚀 PERFORMANCE: Memoized Components for Heavy Renders
+const MemoizedPermissionCheckbox = memo(({ 
+  id, 
+  checked, 
+  onCheckedChange, 
+  label, 
+  disabled = false 
+}: {
+  id: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  label: string;
+  disabled?: boolean;
+}) => {
+  // 🔥 BOOLEAN VALIDATION: Ensure checked is strictly boolean
+  const isCheckedBoolean = checked === true;
+  
+  return (
+    <div className="flex items-center space-x-2">
+      <Checkbox
+        id={id}
+        checked={isCheckedBoolean}
+        onCheckedChange={(checkedValue) => {
+          // 🔥 BOOLEAN CONVERSION: Ensure the callback receives strict boolean
+          const booleanValue = checkedValue === true;
+          onCheckedChange(booleanValue);
+        }}
+        disabled={disabled}
+      />
+      <Label htmlFor={id} className="capitalize text-sm">
+        {label}
+      </Label>
+    </div>
+  );
+});
+
+MemoizedPermissionCheckbox.displayName = 'MemoizedPermissionCheckbox';
+
+// 🚀 PERFORMANCE: Memoized Permission Group Component
+const MemoizedPermissionGroup = memo(({ 
+  groupKey, 
+  group, 
+  permissions, 
+  onPermissionChange, 
+  onSelectAll,
+  areAllSelected,
+  assignedCount,
+  totalCount,
+  isEditing = false
+}: {
+  groupKey: string;
+  group: any;
+  permissions: any;
+  onPermissionChange: (module: string, submodule: string, action: string, checked: boolean) => void;
+  onSelectAll: (module: string, shouldSelect: boolean) => void;
+  areAllSelected: boolean;
+  assignedCount: number;
+  totalCount: number;
+  isEditing?: boolean;
+}) => {
+  return (
+    <AccordionItem value={groupKey} className="border rounded-lg">
+      <AccordionTrigger className="p-4 hover:no-underline">
+        <div className="flex items-center justify-between w-full">
+          <div className="flex items-center gap-3">
+            <span className="font-semibold">{group.description}</span>
+            <Badge variant="secondary">
+              {assignedCount} / {totalCount} permissions
+            </Badge>
+          </div>
+          <div className="flex items-center gap-2 pr-2">
+            <Checkbox
+              id={`select-all-${isEditing ? 'edit-' : ''}${groupKey}`}
+              checked={areAllSelected === true}
+              onCheckedChange={(checked) => {
+                // 🔥 BOOLEAN CONVERSION: Ensure strict boolean value
+                const booleanValue = checked === true;
+                onSelectAll(groupKey, booleanValue);
+              }}
+            />
+            <Label htmlFor={`select-all-${isEditing ? 'edit-' : ''}${groupKey}`} className="text-sm">
+              Select All
+            </Label>
+          </div>
+        </div>
+      </AccordionTrigger>
+      <AccordionContent className="p-4 pt-0">
+        <div className="space-y-4 pt-4 border-t">
+          {Object.entries(group.modules).map(([moduleKey, moduleName]) => (
+            <Card key={moduleKey}>
+              <CardHeader>
+                <CardTitle className="text-base">{String(moduleName)}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {Object.keys(permissions?.[groupKey]?.[moduleKey] || {}).map((action) => {
+                    const permissionValue = permissions?.[groupKey]?.[moduleKey]?.[action];
+                    // 🔥 BOOLEAN VALIDATION: Ensure strict boolean check
+                    const isChecked = permissionValue === true;
+                    
+                    return (
+                      <MemoizedPermissionCheckbox
+                        key={`${groupKey}-${moduleKey}-${action}`}
+                        id={`${isEditing ? 'edit-' : ''}${groupKey}-${moduleKey}-${action}`}
+                        checked={isChecked}
+                        onCheckedChange={(checked) => {
+                          // 🔥 BOOLEAN CONVERSION: Ensure strict boolean value
+                          const booleanValue = checked === true;
+                          onPermissionChange(groupKey, moduleKey, action, booleanValue);
+                        }}
+                        label={action}
+                      />
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </AccordionContent>
+    </AccordionItem>
+  );
+});
+
+MemoizedPermissionGroup.displayName = 'MemoizedPermissionGroup';
+
+// 🚀 PERFORMANCE: Optimized Stats Card Component
+const MemoizedStatsCard = memo(({ title, value, icon }: { title: string; value: number; icon: React.ReactNode }) => (
+  <Card>
+    <CardContent className="flex items-center justify-between p-6">
+      <div>
+        <p className="text-sm font-medium text-gray-500">{title}</p>
+        <p className="text-3xl font-bold text-gray-800">{value}</p>
+      </div>
+      <div className="p-3 bg-gray-100 rounded-lg">
+        {icon}
+      </div>
+    </CardContent>
+  </Card>
+));
+
+MemoizedStatsCard.displayName = 'MemoizedStatsCard';
+
+// 🚀 PERFORMANCE: Optimized Role Row Component
+const MemoizedRoleRow = memo(({ 
+  role, 
+  userCount, 
+  onEdit, 
+  onDelete, 
+  onAssignUser, 
+  onViewUsers 
+}: {
+  role: Role;
+  userCount: number;
+  onEdit: (role: Role) => void;
+  onDelete: (role: Role) => void;
+  onAssignUser: (role: Role) => void;
+  onViewUsers: (role: Role) => void;
+}) => {
+  const isSystemRole = role.name.toLowerCase() === 'super_admin' || role.name.toLowerCase() === 'super admin';
+  
+  return (
+    <TableRow>
+      <TableCell>
+        <div className="flex flex-col">
+          <Badge variant="outline">{role.name}</Badge>
+          
+        </div>
+      </TableCell>
+      <TableCell>{role.description}</TableCell>
+      <TableCell>
+        <Button variant="link" className="p-0 h-auto" onClick={() => onViewUsers(role)}>
+          {userCount || 0}
+        </Button>
+      </TableCell>
+      <TableCell className="flex gap-2">
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="flex items-center gap-1" 
+          onClick={() => onEdit(role)}
+          disabled={isSystemRole}
+        >
+          <Pencil className="h-3 w-3" /> Edit
+        </Button>
+        <Button 
+          variant="destructive" 
+          size="sm" 
+          className="flex items-center gap-1" 
+          onClick={() => onDelete(role)}
+          disabled={isSystemRole}
+        >
+          <Trash2 className="h-3 w-3" /> Delete
+        </Button>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="flex items-center gap-1"
+          onClick={() => onAssignUser(role)}
+          disabled={isSystemRole}
+        >
+          <UserPlus className="h-3 w-4" /> Add User
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+});
+
+MemoizedRoleRow.displayName = 'MemoizedRoleRow';
 
 // Custom hooks for better state management
 const useRoleManagement = () => {
@@ -234,13 +458,15 @@ const useRoleManagement = () => {
     unassignRoleFromUser,
     hasPermission,
     users,
-    user
+    user,
+    refreshRoles
   } = useAuth();
   
   const [newRoleName, setNewRoleName] = useState<string>('');
   const [newRolePermissions, setNewRolePermissions] = useState<UserPermissions>(
     JSON.parse(JSON.stringify(ALL_POSSIBLE_PERMISSIONS))
   );
+  const [newRoleDescription, setNewRoleDescription] = useState<string>('');
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [isAssignUserDialogOpen, setIsAssignUserDialogOpen] = useState<boolean>(false);
   const [roleToAssignUser, setRoleToAssignUser] = useState<Role | null>(null);
@@ -256,8 +482,182 @@ const useRoleManagement = () => {
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingRolePermissions, setEditingRolePermissions] = useState<UserPermissions | null>(null);
-  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
-  const [rolesToCompare, setRolesToCompare] = useState<Role[]>([]);
+  const [editingRoleName, setEditingRoleName] = useState<string>('');
+  const [editingRoleDescription, setEditingRoleDescription] = useState<string>('');
+  // 🔥 NEW: State for permissions API data
+  const [allPermissions, setAllPermissions] = useState<GroupedPermissionsResponse | null>(null);
+  const [rolePermissionsCache, setRolePermissionsCache] = useState<{[roleId: string]: UserPermissions}>({});
+  const [isLoadingPermissions, setIsLoadingPermissions] = useState<boolean>(false);
+  const [permissionsError, setPermissionsError] = useState<string | null>(null);
+  
+  // 🔥 NEW: State for tracking changes before saving to backend
+
+  // 🔥 NEW: Fetch all permissions from API
+  const fetchAllPermissions = useCallback(async () => {
+    try {
+      setIsLoadingPermissions(true);
+      setPermissionsError(null);
+      
+      const permissions = await permissionService.getAllPermissions();
+      setAllPermissions(permissions);
+      
+      return permissions;
+    } catch (error: any) {
+      console.error('Error fetching all permissions:', error);
+      setPermissionsError(error.message || 'Failed to fetch permissions');
+      throw error;
+    } finally {
+      setIsLoadingPermissions(false);
+    }
+  }, []);
+
+  // 🔥 NEW: Fetch permissions for a specific role
+  const fetchRolePermissions = useCallback(async (roleId: string) => {
+    try {
+      setIsLoadingPermissions(true);
+      setPermissionsError(null);
+      
+      const permissions = await permissionService.getRolePermissions(roleId);
+      
+      // Cache the permissions
+      setRolePermissionsCache(prev => ({
+        ...prev,
+        [roleId]: permissions
+      }));
+      
+      return permissions;
+    } catch (error: any) {
+      console.error('❌ Error in fetchRolePermissions:', error);
+      
+      setPermissionsError(error.message || 'Failed to fetch role permissions');
+      throw error;
+    } finally {
+      setIsLoadingPermissions(false);
+    }
+  }, []);
+
+  // 🔥 NEW: Create role with permissions and sync to backend
+  const createRoleWithPermissions = useCallback(async (roleName: string, permissions: UserPermissions, description?: string) => {
+    try {
+      setIsLoading(true);
+      
+      // Create role data
+      const roleData: Partial<Role> = {
+        name: roleName,
+        description: description || '',
+        permissions: permissions
+      };
+      
+      // Use AuthContext createRole which handles backend API call and transformation
+      await createRole(roleData);
+      
+      return roleData;
+    } catch (error: any) {
+      console.error('Error creating role:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [createRole]);
+
+  // 🔥 NEW: Transform permissions from object to array format for backend
+  const transformPermissionsToArray = useCallback((permissions: UserPermissions): string[] => {
+    const permissionsArray: string[] = [];
+    
+    // 🔥 DEBUG: Check if permissions object is valid
+    if (!permissions || typeof permissions !== 'object') {
+      console.error('❌ Invalid permissions object passed to transformPermissionsToArray:', permissions);
+      return permissionsArray;
+    }
+    
+    // 🔥 FIX: Transform each module and include ALL permissions (true ones only for backend)
+    // But we need to ensure we're sending the complete state, not just true permissions
+    Object.entries(permissions).forEach(([module, modulePerms]) => {
+      if (modulePerms && typeof modulePerms === 'object') {
+        Object.entries(modulePerms).forEach(([submodule, submodulePerms]) => {
+          if (submodulePerms && typeof submodulePerms === 'object') {
+            Object.entries(submodulePerms).forEach(([action, hasPermission]) => {
+              // 🔥 CRITICAL FIX: Only add permissions that are explicitly true
+              // Backend expects only enabled permissions in the array
+              if (hasPermission === true) {
+                const permissionString = `${module}.${submodule}.${action}`;
+                permissionsArray.push(permissionString);
+              }
+              // Note: False permissions are handled by their absence from the array
+              // Backend will understand that missing permissions = disabled
+            });
+          }
+        });
+      }
+    });
+    
+    // 🔥 IMPORTANT: Empty array is valid - it means no permissions are enabled
+    // Don't warn about empty array as it's a valid state when all permissions are disabled
+    
+    return permissionsArray;
+  }, []);
+
+  // 🔥 NEW: Update role permissions and sync to backend
+  const updateRolePermissions = useCallback(async (roleId: string, permissions: UserPermissions) => {
+    try {
+      setIsLoading(true);
+      
+      // 🔥 FIX: Transform permissions to array format for backend
+      const permissionsArray = transformPermissionsToArray(permissions);
+      
+      // 🔥 IMPORTANT: Empty array is valid - means all permissions are disabled
+      // This is actually the fix for the uncheck/disable issue!
+      
+      // 🔥 FIX: Get the role details to send complete data
+      const currentRole = roles.find(r => r.id === roleId || r._id === roleId);
+      
+      // 🔥 FIX: Send complete role data in backend expected format
+      const roleUpdateData = {
+        name: currentRole?.name || 'Unknown Role',
+        description: currentRole?.description || '',
+        permissions: permissionsArray, // This can be empty array for all disabled permissions
+        isActive: true
+      };
+      
+      // 🔥 DEBUG: Log what we're sending for unchecked permissions
+      if (permissionsArray.length === 0) {
+        console.log('📤 Sending empty permissions array (all permissions disabled) for role:', currentRole?.name);
+      }
+      
+      // Update permissions via backend API with proper format
+      const updatedRole = await roleService.updateRole(roleId, roleUpdateData);
+      
+      // 🔥 NEW: Check if backend returned empty permissions
+      if (!updatedRole.permissions || updatedRole.permissions.length === 0) {
+        // This is actually EXPECTED when all permissions are disabled!
+        // Only log error if we sent permissions but got none back
+        if (permissionsArray.length > 0) {
+          console.error('❌ CRITICAL: Backend returned empty permissions array despite sending permissions!');
+          
+          return {
+            ...updatedRole,
+            _hasEmptyPermissionsError: true
+          };
+        } else {
+          // This is normal - we disabled all permissions
+          console.log('✅ All permissions successfully disabled for role:', currentRole?.name);
+        }
+      }
+      
+      // Update cache
+      setRolePermissionsCache(prev => ({
+        ...prev,
+        [roleId]: permissions
+      }));
+      
+      return updatedRole;
+    } catch (error: any) {
+      console.error('Error updating role permissions:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [transformPermissionsToArray, roles]);
 
   const userCountsByRole = useMemo(() => {
     const counts: { [roleName: string]: number } = {};
@@ -283,10 +683,13 @@ const useRoleManagement = () => {
     hasPermission,
     users,
     user,
+    refreshRoles,
     newRoleName,
     setNewRoleName,
     newRolePermissions,
     setNewRolePermissions,
+    newRoleDescription,
+    setNewRoleDescription,
     selectedRole,
     setSelectedRole,
     isAssignUserDialogOpen,
@@ -317,15 +720,62 @@ const useRoleManagement = () => {
     setIsEditModalOpen,
     editingRolePermissions,
     setEditingRolePermissions,
+    editingRoleName,
+    setEditingRoleName,
+    editingRoleDescription,
+    setEditingRoleDescription,
     userCountsByRole,
-    isCompareModalOpen,
-    setIsCompareModalOpen,
-    rolesToCompare,
-    setRolesToCompare
+    // 🔥 NEW: Permissions API state and functions
+    allPermissions,
+    rolePermissionsCache,
+    isLoadingPermissions,
+    permissionsError,
+    fetchAllPermissions,
+    fetchRolePermissions,
+    createRoleWithPermissions,
+    updateRolePermissions,
+    transformPermissionsToArray
   };
 };
 
+// Simple debounce utility function with optimized timing
+const debounce = <T extends (...args: any[]) => any>(func: T, delay: number): ((...args: Parameters<T>) => void) => {
+  let timeoutId: NodeJS.Timeout;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => func(...args), delay);
+  };
+};
+
+// 🚀 PERFORMANCE: Environment-based logging utility
+const isDevelopment = process.env.NODE_ENV === 'development';
+const optimizedLog = {
+  info: (message: string, ...args: any[]) => {
+    if (isDevelopment) console.log(`ℹ️ ${message}`, ...args);
+  },
+  success: (message: string, ...args: any[]) => {
+    if (isDevelopment) console.log(`✅ ${message}`, ...args);
+  },
+  warning: (message: string, ...args: any[]) => {
+    if (isDevelopment) console.warn(`⚠️ ${message}`, ...args);
+  },
+  error: (message: string, ...args: any[]) => {
+    console.error(`❌ ${message}`, ...args); // Always log errors
+  },
+  debug: (message: string, ...args: any[]) => {
+    if (isDevelopment && window.location.search.includes('debug=true')) {
+      console.log(`🔧 ${message}`, ...args);
+    }
+  }
+};
+
+// 🚀 PERFORMANCE: Optimized permission change handler with faster debounce
+const FAST_DEBOUNCE_DELAY = 500; // Reduced from 1000ms to 500ms for faster response
+
 export default function RolesPermissions() {
+  // 🚀 PERFORMANCE: Track component performance
+  const { trackApiCall, logReport } = usePerformanceTracking('RolesPermissions');
+  
   const { toast } = useToast();
   const {
     roles,
@@ -334,10 +784,13 @@ export default function RolesPermissions() {
     deleteRole,
     hasPermission,
     users,
+    refreshRoles,
     newRoleName,
     setNewRoleName,
     newRolePermissions,
     setNewRolePermissions,
+    newRoleDescription,
+    setNewRoleDescription,
     roleSearchTerm,
     setRoleSearchTerm,
     selectedTemplate,
@@ -354,6 +807,10 @@ export default function RolesPermissions() {
     setIsEditModalOpen,
     editingRolePermissions,
     setEditingRolePermissions,
+    editingRoleName,
+    setEditingRoleName,
+    editingRoleDescription,
+    setEditingRoleDescription,
     userCountsByRole,
     isAssignUserDialogOpen,
     setIsAssignUserDialogOpen,
@@ -365,12 +822,489 @@ export default function RolesPermissions() {
     viewUsersRole,
     setViewUsersRole,
     unassignRoleFromUser,
-    isCompareModalOpen,
-    setIsCompareModalOpen,
-    rolesToCompare,
-    setRolesToCompare
+    // 🔥 NEW: Permissions API state and functions
+    allPermissions,
+    rolePermissionsCache,
+    isLoadingPermissions,
+    permissionsError,
+    fetchAllPermissions,
+    fetchRolePermissions,
+    createRoleWithPermissions,
+    updateRolePermissions,
+    transformPermissionsToArray
   } = useRoleManagement();
   const { user } = useAuth();
+
+  // 🚀 PERFORMANCE: Log performance report on component unmount
+  useEffect(() => {
+    return () => {
+      logReport();
+    };
+  }, [logReport]);
+
+  // 🔥 NEW: Initialize permissions on component mount
+  useEffect(() => {
+    const initializePermissions = async () => {
+      try {
+        // Fetch all available permissions
+        await fetchAllPermissions();
+        
+        toast({
+          title: "✅ Permissions Loaded",
+          description: "All available permissions have been loaded from the server.",
+          duration: 2000,
+        });
+      } catch (error: any) {
+        console.error('❌ Failed to initialize permissions:', error);
+        
+        // Don't show error toast for permissions initialization failure
+        // as it's not critical for basic functionality
+        console.warn('⚠️ Permissions initialization failed, continuing with default permissions');
+      }
+    };
+
+    // Only initialize if we haven't loaded permissions yet
+    if (!allPermissions && !isLoadingPermissions) {
+      initializePermissions();
+    }
+  }, [allPermissions, isLoadingPermissions, fetchAllPermissions, toast]);
+
+  // 🔥 IMPROVED: Enhanced debounced save function for permissions with faster response
+  const debouncedSavePermissions = useCallback(
+    debounce(async (roleId: string, permissions: UserPermissions) => {
+      try {
+        // Additional validation
+        if (!roleId || roleId.trim() === '') {
+          optimizedLog.error('Invalid roleId in debouncedSavePermissions:', roleId);
+          toast({
+            title: "❌ Save Failed",
+            description: "Invalid role ID. Please refresh the page and try again.",
+            variant: "destructive",
+          });
+          return;
+        }
+        
+        // Check if permissions object is valid
+        if (!permissions || typeof permissions !== 'object') {
+          optimizedLog.error('Invalid permissions object:', permissions);
+          toast({
+            title: "❌ Save Failed",
+            description: "Invalid permissions data. Please try again.",
+            variant: "destructive",
+          });
+          return;
+        }
+        
+        // 🔥 FIX: Use updateRolePermissions instead of updateRole to avoid conflicts
+        const result = await updateRolePermissions(roleId, permissions);
+        
+        // 🔥 NEW: Refresh roles in frontend to show updated permissions immediately
+        await refreshRoles();
+        
+        // 🔥 NEW: Check if backend returned empty permissions error
+        if (result && (result as any)._hasEmptyPermissionsError) {
+          console.error('❌ Backend returned empty permissions array!');
+          toast({
+            title: "⚠️ Backend Issue Detected",
+            description: "Permissions were sent but backend returned empty array. Check server logs.",
+            variant: "destructive",
+            duration: 5000,
+          });
+          return;
+        }
+        
+        toast({
+          title: "✅ Permissions Saved",
+          description: "Role permissions have been updated successfully.",
+          duration: 1000, // 🚀 PERFORMANCE: Even faster toast duration
+        });
+        
+      } catch (error: any) {
+        console.error('❌ Failed to save permissions:', error);
+        
+        let errorMessage = "Failed to save permissions. Please try again.";
+        if (error.response?.status === 401) {
+          errorMessage = "Authentication failed. Please login again.";
+        } else if (error.response?.status === 403) {
+          errorMessage = "You don't have permission to update roles.";
+        } else if (error.response?.status === 404) {
+          errorMessage = "Role not found. Please refresh the page.";
+        } else if (error.response?.data?.message) {
+          errorMessage = error.response.data.message;
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+        
+        toast({
+          title: "❌ Save Failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
+    }, FAST_DEBOUNCE_DELAY), // 🚀 PERFORMANCE: Use faster debounce delay
+    [updateRolePermissions, toast, refreshRoles]
+  );
+
+  // 🔥 ENHANCED: Improved handleEditClick with better error handling and fallbacks
+  const handleEditClick = async (role: Role) => {
+    try {
+      // Get role ID with multiple fallbacks
+      const roleId = role.id || role._id || role.name || '';
+      
+      if (!roleId) {
+        console.error('❌ No role identifier found for role:', role);
+        toast({
+          title: "❌ Error",
+          description: "Role identifier not found. Cannot edit permissions.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // 🔥 PERFORMANCE: Show modal immediately with cached data, then update
+      setIsEditModalOpen(true);
+      setEditingRole(role);
+      setEditingRoleName(role.name || '');
+      setEditingRoleDescription(role.description || '');
+        
+      // Start with role.permissions if available, otherwise use default structure
+      let initialPermissions = role.permissions as UserPermissions || JSON.parse(JSON.stringify(ALL_POSSIBLE_PERMISSIONS));
+      
+      // 🔥 BOOLEAN VALIDATION: Validate and clean permissions structure
+      if (!validatePermissionStructure(initialPermissions)) {
+        console.warn('⚠️ Invalid permission structure detected, using default permissions');
+        initialPermissions = JSON.parse(JSON.stringify(ALL_POSSIBLE_PERMISSIONS));
+      }
+      
+      const transformedPermissions = transformBackendPermissions(initialPermissions);
+      setEditingRolePermissions(transformedPermissions);
+      
+      // 🔥 BACKGROUND: Try to fetch fresh permissions from API (non-blocking)
+      try {
+        const freshPermissions = await fetchRolePermissions(roleId);
+        
+        const transformedFreshPermissions = transformBackendPermissions(freshPermissions);
+        setEditingRolePermissions(transformedFreshPermissions);
+          
+          toast({
+          title: "🔄 Permissions Refreshed",
+          description: `Latest permissions loaded for role: ${role.name}`,
+            duration: 2000,
+          });
+      } catch (apiError: any) {
+        // Don't show error toast since we already have cached data
+      }
+      
+    } catch (error: any) {
+      console.error('❌ Error in handleEditClick:', error);
+      setIsEditModalOpen(false);
+      setEditingRole(null);
+      setEditingRolePermissions(null);
+      
+      toast({
+        title: "❌ Error",
+        description: "Failed to open role editor. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // 🔥 NEW: Enhanced permission transformation function with strict boolean conversion
+  const transformBackendPermissions = useCallback((backendPerms: any): UserPermissions => {
+    // Start with the default structure - all permissions set to false (boolean)
+    const transformed: UserPermissions = {
+      employee_management: {
+        employees: { view: false, create: false, edit: false, delete: false },
+        department: { manage: false }
+      },
+      hiring: {
+        candidate: { view: false, create: false, edit: false, delete: false },
+        job: { view: false, edit: false, delete: false, post: false }
+      },
+      settings: {
+        user: { view: false, create: false, edit: false, delete: false },
+        role: { view: false, create: false, edit: false, delete: false }
+      },
+      system: {
+        system: { admin: false }
+      }
+    };
+
+    // 🔥 BOOLEAN CONVERSION: Helper function to ensure strict boolean values
+    const toBooleanStrict = (value: any): boolean => {
+      if (value === true || value === 'true' || value === 1 || value === '1') {
+        return true;
+      }
+      if (value === false || value === 'false' || value === 0 || value === '0' || value === null || value === undefined) {
+        return false;
+      }
+      // For any other value, convert to boolean
+      return Boolean(value);
+    };
+
+    // Handle empty or null permissions
+    if (!backendPerms) {
+      return transformed;
+    }
+
+    // Handle array format from backend (e.g., ["employee_management.employees.view"])
+    if (Array.isArray(backendPerms)) {
+      if (backendPerms.length === 0) {
+        return transformed;
+      }
+      
+      try {
+        backendPerms.forEach((permission: any, index: number) => {
+          let permissionString: string;
+          
+          // Handle different permission formats
+          if (typeof permission === 'string') {
+            permissionString = permission;
+          } else if (typeof permission === 'object' && permission !== null) {
+            // Handle permission objects with 'name' field
+            if (permission.name && typeof permission.name === 'string') {
+              permissionString = permission.name;
+            } else {
+              if (process.env.NODE_ENV === 'development') {
+              console.warn('⚠️ Permission object missing name field at index', index, ':', permission);
+              }
+              return;
+            }
+          } else {
+            if (process.env.NODE_ENV === 'development') {
+            console.warn('⚠️ Skipping non-string/non-object permission at index', index, ':', permission, 'Type:', typeof permission);
+            }
+            return;
+          }
+          
+          // Ensure permission string is not empty
+          if (!permissionString.trim()) {
+            return;
+          }
+          
+          // Parse permission strings like "employee_management.employees.view" or "employees.create"
+          const parts = permissionString.split('.');
+          
+          if (parts.length === 2) {
+            // Handle format like "employees.create" - need to map to our structure
+            const [moduleOrSubmodule, action] = parts;
+            
+            // Map common modules to our structure
+            let module: string;
+            let submodule: string;
+            
+            if (moduleOrSubmodule === 'employees') {
+              module = 'employee_management';
+              submodule = 'employees';
+            } else if (moduleOrSubmodule === 'department') {
+              module = 'employee_management';
+              submodule = 'department';
+            } else if (moduleOrSubmodule === 'candidate') {
+              module = 'hiring';
+              submodule = 'candidate';
+            } else if (moduleOrSubmodule === 'job') {
+              module = 'hiring';
+              submodule = 'job';
+            } else if (moduleOrSubmodule === 'user') {
+              module = 'settings';
+              submodule = 'user';
+            } else if (moduleOrSubmodule === 'role') {
+              module = 'settings';
+              submodule = 'role';
+            } else if (moduleOrSubmodule === 'system') {
+              module = 'system';
+              submodule = 'system';
+            } else {
+              return;
+            }
+            
+            if (transformed[module as keyof UserPermissions]) {
+              const modulePerms = transformed[module as keyof UserPermissions] as any;
+              if (modulePerms[submodule]) {
+                if (modulePerms[submodule][action] !== undefined) {
+                  // 🔥 BOOLEAN CONVERSION: Always set to true (boolean) for enabled permissions
+                  modulePerms[submodule][action] = true;
+                }
+              }
+            }
+          } else if (parts.length === 3) {
+            // Handle format like "employee_management.employees.view"
+            const [module, submodule, action] = parts;
+            
+            if (transformed[module as keyof UserPermissions]) {
+              const modulePerms = transformed[module as keyof UserPermissions] as any;
+              if (modulePerms[submodule]) {
+                if (modulePerms[submodule][action] !== undefined) {
+                  // 🔥 BOOLEAN CONVERSION: Always set to true (boolean) for enabled permissions
+                  modulePerms[submodule][action] = true;
+                }
+              }
+            }
+          }
+        });
+      } catch (error) {
+        console.error('❌ Error processing permissions array:', error);
+        return transformed; // Return default structure on error
+      }
+      
+      return transformed;
+    }
+
+    // Handle object format from backend
+    if (backendPerms && typeof backendPerms === 'object') {
+      // Check if the backend permissions have the expected structure
+      const hasExpectedStructure = backendPerms.employee_management || 
+                                 backendPerms.hiring || 
+                                 backendPerms.settings || 
+                                 backendPerms.system;
+      
+      if (hasExpectedStructure) {
+        // Merge backend permissions with our default structure
+        Object.keys(backendPerms).forEach(moduleKey => {
+          if (transformed[moduleKey as keyof UserPermissions] && backendPerms[moduleKey]) {
+            const modulePerms = backendPerms[moduleKey];
+            
+            // Process each submodule
+            Object.keys(modulePerms).forEach(submoduleKey => {
+              if ((transformed[moduleKey as keyof UserPermissions] as any)[submoduleKey] && modulePerms[submoduleKey]) {
+                const submodulePerms = modulePerms[submoduleKey];
+                
+                // Process each action
+                Object.keys(submodulePerms).forEach(actionKey => {
+                  if ((transformed[moduleKey as keyof UserPermissions] as any)[submoduleKey][actionKey] !== undefined) {
+                    const value = submodulePerms[actionKey];
+                    // 🔥 BOOLEAN CONVERSION: Convert any value to strict boolean
+                    (transformed[moduleKey as keyof UserPermissions] as any)[submoduleKey][actionKey] = toBooleanStrict(value);
+                  }
+                });
+              }
+            });
+          }
+        });
+      }
+    }
+    
+    return transformed;
+  }, []);
+
+  // 🔥 NEW: Function to handle permission changes with local state first
+  const handlePermissionChange = useCallback((roleId: string, module: string, submodule: string, action: string, checked: boolean) => {
+    // 🔥 BOOLEAN VALIDATION: Ensure checked is strictly boolean
+    const isCheckedBoolean = checked === true;
+    
+    // Validate roleId
+    if (!roleId || roleId.trim() === '') {
+      console.error('❌ Invalid roleId provided to handlePermissionChange:', roleId);
+      toast({
+        title: "❌ Permission Update Failed",
+        description: "Role ID is missing. Please refresh the page and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // 🔥 PERFORMANCE: Show immediate feedback with boolean status
+    toast({
+      title: isCheckedBoolean ? "✅ Permission Enabled" : "❌ Permission Disabled",
+      description: `${module}.${submodule}.${action} ${isCheckedBoolean ? 'enabled' : 'disabled'}. Saving...`,
+      duration: 1500,
+    });
+    
+    // Update local state immediately for responsive UI
+    const updatePermissions = (prevPermissions: UserPermissions | null): UserPermissions => {
+      if (!prevPermissions) {
+        prevPermissions = JSON.parse(JSON.stringify(ALL_POSSIBLE_PERMISSIONS));
+      }
+      
+      const newPermissions = JSON.parse(JSON.stringify(prevPermissions));
+      
+      // Ensure the module exists
+      if (!newPermissions[module as keyof UserPermissions]) {
+        (newPermissions as any)[module] = {};
+      }
+      
+      // Ensure the submodule exists
+      if (!(newPermissions[module as keyof UserPermissions] as any)[submodule]) {
+        (newPermissions[module as keyof UserPermissions] as any)[submodule] = {};
+      }
+      
+      // 🔥 BOOLEAN CONVERSION: Set the permission - ensure it's strictly boolean
+      (newPermissions[module as keyof UserPermissions] as any)[submodule][action] = isCheckedBoolean;
+      
+      return newPermissions;
+    };
+    
+    // Update editing role permissions if this is for the currently editing role
+    if (editingRole && (editingRole.id === roleId || editingRole._id === roleId)) {
+      setEditingRolePermissions(prev => updatePermissions(prev));
+    }
+    
+    // Debounced save to backend
+    const currentPermissions = editingRolePermissions || rolePermissionsCache[roleId] || ALL_POSSIBLE_PERMISSIONS;
+    const permissionsToSave = updatePermissions(currentPermissions);
+    debouncedSavePermissions(roleId, permissionsToSave);
+  }, [editingRole, editingRolePermissions, rolePermissionsCache, debouncedSavePermissions, setEditingRolePermissions, toast]);
+
+  // Handle role update
+  const handleUpdateRole = useCallback(async () => {
+    if (!editingRole || !editingRolePermissions) {
+      console.error('Cannot update role: missing editingRole or editingRolePermissions');
+      return;
+    }
+
+    try {
+      // 🔥 NEW: Save name and description changes if they were modified
+      if (editingRoleName !== editingRole.name || editingRoleDescription !== editingRole.description) {
+        const roleId = editingRole.id || editingRole._id || '';
+        
+        const roleUpdateData = {
+          name: editingRoleName.trim(),
+          description: editingRoleDescription.trim(),
+          permissions: transformPermissionsToArray(editingRolePermissions),
+          isActive: true
+        };
+        
+        await roleService.updateRole(roleId, roleUpdateData);
+        
+        // 🔥 NEW: Refresh roles in frontend to show updated data immediately
+        await refreshRoles();
+        
+        toast({
+          title: "✅ Role Updated",
+          description: `Role "${editingRoleName}" has been updated successfully.`,
+          duration: 2000,
+        });
+      }
+      
+      const newHistoryEntry: RoleHistory = {
+        id: new Date().toISOString(),
+        roleName: editingRoleName,
+        action: 'updated',
+        changes: [
+          { field: 'name', oldValue: editingRole.name, newValue: editingRoleName },
+          { field: 'description', oldValue: editingRole.description || '', newValue: editingRoleDescription },
+          { field: 'permissions', oldValue: 'Previous permissions', newValue: 'New permissions set' }
+        ],
+        timestamp: new Date().toISOString(),
+        user: user?.email || 'System'
+      };
+      setRoleHistory(prev => [newHistoryEntry, ...prev]);
+
+      setIsEditModalOpen(false);
+      setEditingRole(null);
+      setEditingRolePermissions(null);
+      setEditingRoleName('');
+      setEditingRoleDescription('');
+      
+    } catch (error: any) {
+      console.error('Failed to update role:', error);
+      toast({
+        title: "❌ Update Failed",
+        description: "Failed to update role. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [editingRole, editingRolePermissions, editingRoleName, editingRoleDescription, transformPermissionsToArray, setRoleHistory, user, toast, refreshRoles]);
 
   // Filter roles based on search term
   const filteredRoles = useMemo(() => {
@@ -382,7 +1316,7 @@ export default function RolesPermissions() {
 
   // Handle permission change for new role
   const handleNewRolePermissionChange = useCallback((module: string, submodule: string, action: string, checked: boolean) => {
-    if (!hasPermission(COMPONENT_PERMISSIONS.RolesPermissions)) {
+    if (!hasPermission('settings.role.manage')) {
       toast({
         title: "Access Denied",
         description: "You don't have permission to create new roles.",
@@ -390,6 +1324,9 @@ export default function RolesPermissions() {
       });
       return;
     }
+
+    // 🔥 BOOLEAN VALIDATION: Ensure checked is strictly boolean
+    const isCheckedBoolean = checked === true;
 
     setNewRolePermissions(prev => {
       const newPermissions = { ...prev };
@@ -402,26 +1339,37 @@ export default function RolesPermissions() {
          // @ts-ignore
         newPermissions[module as keyof UserPermissions][submodule] = {};
       }
-       // @ts-ignore
-      newPermissions[module as keyof UserPermissions][submodule][action] = checked;
+       // @ts-ignore - 🔥 BOOLEAN CONVERSION: Set strictly boolean value
+      newPermissions[module as keyof UserPermissions][submodule][action] = isCheckedBoolean;
       return newPermissions;
     });
   }, [hasPermission, toast, setNewRolePermissions]);
 
   const handleSelectAllModulePermissions = useCallback((module: string, shouldSelect: boolean) => {
+    // 🔥 BOOLEAN VALIDATION: Ensure shouldSelect is strictly boolean
+    const shouldSelectBoolean = shouldSelect === true;
+    
+    // 🔥 PERFORMANCE: Show immediate feedback
+    toast({
+      title: shouldSelectBoolean ? "✅ Selecting All Permissions" : "❌ Unselecting All Permissions",
+      description: `${shouldSelectBoolean ? 'Enabling' : 'Disabling'} all permissions in ${module} module...`,
+      duration: 1500,
+    });
+    
     setNewRolePermissions(prev => {
       const newPermissions = { ...prev };
       const modulePermissions = (newPermissions as any)[module];
       if (modulePermissions) {
         Object.keys(modulePermissions).forEach(submodule => {
           Object.keys(modulePermissions[submodule]).forEach(action => {
-            modulePermissions[submodule][action] = shouldSelect;
+            // 🔥 BOOLEAN CONVERSION: Set strictly boolean value
+            modulePermissions[submodule][action] = shouldSelectBoolean;
           });
         });
       }
       return newPermissions;
     });
-  }, [setNewRolePermissions]);
+  }, [setNewRolePermissions, toast]);
 
   const areAllModulePermissionsSelected = (moduleKey: string): boolean => {
     const modulePermissions = (newRolePermissions as any)[moduleKey];
@@ -444,9 +1392,13 @@ export default function RolesPermissions() {
 
   const countAssignedPermissions = (modulePermissions: any): number => {
     if (!modulePermissions) return 0;
-    return Object.values(modulePermissions).reduce((count: number, submodule: any) => {
-        return count + Object.values(submodule).filter(value => value === true).length;
+    const count = Object.values(modulePermissions).reduce((count: number, submodule: any) => {
+        const trueCount = Object.values(submodule).filter(value => {
+          return value === true;
+        }).length;
+        return count + trueCount;
     }, 0);
+    return count;
   };
 
   // Handle template selection
@@ -454,11 +1406,12 @@ export default function RolesPermissions() {
     setSelectedTemplate(template);
     setNewRolePermissions(template.permissions);
     setNewRoleName(template.name);
+    setNewRoleDescription(template.description);
       toast({
       title: "Template Applied!",
       description: `The "${template.name}" template is ready to be customized.`,
       });
-  }, [setNewRoleName, setNewRolePermissions, setSelectedTemplate, toast]);
+  }, [setNewRoleName, setNewRolePermissions, setSelectedTemplate, setNewRoleDescription, toast]);
 
   // Handle role creation
   const handleCreateRole = useCallback(async () => {
@@ -471,19 +1424,41 @@ export default function RolesPermissions() {
       return;
     }
 
-    try {
-      await createRole({
-        name: newRoleName,
-        description: `Custom role: ${newRoleName}`,
-        permissions: newRolePermissions
-      });
+    // Check if at least one permission is selected with proper typing
+    const hasAnyPermission = Object.values(newRolePermissions).some((module: any) => 
+      Object.values(module).some((submodule: any) => 
+        Object.values(submodule).some((permission: any) => permission === true)
+      )
+    );
 
+    if (!hasAnyPermission) {
+      toast({
+        title: "No Permissions Selected",
+        description: "Please select at least one permission for the role.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Use the new createRoleWithPermissions function that syncs with backend
+      await createRoleWithPermissions(
+        newRoleName, 
+        newRolePermissions, 
+        newRoleDescription
+      );
+
+      // 🔥 NEW: Refresh roles in frontend to show newly created role immediately
+      await refreshRoles();
+
+      // Add to history
       const newHistoryEntry: RoleHistory = {
         id: new Date().toISOString(),
           roleName: newRoleName,
           action: 'created',
           changes: [
           { field: 'name', oldValue: '', newValue: newRoleName },
+          { field: 'description', oldValue: '', newValue: newRoleDescription },
           { field: 'permissions', oldValue: {}, newValue: 'Initial permissions set' },
           ],
           timestamp: new Date().toISOString(),
@@ -491,13 +1466,44 @@ export default function RolesPermissions() {
       };
       setRoleHistory(prev => [newHistoryEntry, ...prev]);
 
+      // Reset form
       setNewRoleName('');
       setNewRolePermissions(JSON.parse(JSON.stringify(ALL_POSSIBLE_PERMISSIONS)));
+      setNewRoleDescription('');
       setSelectedTemplate(null);
-    } catch (error) {
-      console.error('Failed to create role:', error);
+
+      // Show success message
+      toast({
+        title: "Success",
+        description: `Role "${newRoleName}" created successfully and saved to database.`,
+      });
+    } catch (error: any) {
+      let errorMessage = "Failed to create role. Please try again.";
+      
+      // Handle specific error cases
+      if (error?.response?.status === 400) {
+        if (error.response.data?.message) {
+          errorMessage = error.response.data.message;
+        } else {
+          errorMessage = "Invalid role data. Please check the role name and permissions.";
+        }
+      } else if (error?.response?.status === 409) {
+        errorMessage = "A role with this name already exists. Please choose a different name.";
+      } else if (error?.response?.status === 403) {
+        errorMessage = "You don't have permission to create roles.";
+      } else if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
     }
-  }, [newRoleName, newRolePermissions, createRole, toast, setSelectedTemplate, setNewRoleName, setNewRolePermissions, user, setRoleHistory]);
+  }, [newRoleName, newRolePermissions, newRoleDescription, createRoleWithPermissions, toast, setSelectedTemplate, setNewRoleName, setNewRolePermissions, setNewRoleDescription, user, setRoleHistory, refreshRoles]);
 
   // Handle role deletion
   const handleDeleteRole = useCallback(async (role: Role) => {
@@ -510,6 +1516,9 @@ export default function RolesPermissions() {
 
     try {
       await deleteRole(roleToDelete.name);
+      
+      // 🔥 NEW: Refresh roles in frontend to remove deleted role immediately
+      await refreshRoles();
       
       const newHistoryEntry: RoleHistory = {
         id: new Date().toISOString(),
@@ -526,42 +1535,66 @@ export default function RolesPermissions() {
     } catch (error) {
       console.error('Failed to delete role:', error);
     }
-  }, [roleToDelete, deleteRole, setIsDeleteDialogOpen, setRoleToDelete, user, setRoleHistory]);
+  }, [roleToDelete, deleteRole, setIsDeleteDialogOpen, setRoleToDelete, user, setRoleHistory, refreshRoles]);
 
   const handleEditRolePermissionChange = useCallback((module: string, submodule: string, action: string, checked: boolean) => {
-    setEditingRolePermissions(prev => {
-      if (!prev) return null;
-      const newPermissions = JSON.parse(JSON.stringify(prev)); // Deep copy
-      if (!newPermissions[module as keyof UserPermissions]) {
-        // @ts-ignore
-        newPermissions[module as keyof UserPermissions] = {};
-      }
-      // @ts-ignore
-      if (!newPermissions[module as keyof UserPermissions][submodule]) {
-        // @ts-ignore
-        newPermissions[module as keyof UserPermissions][submodule] = {};
-      }
-      // @ts-ignore
-      newPermissions[module as keyof UserPermissions][submodule][action] = checked;
-      return newPermissions;
-    });
-  }, [setEditingRolePermissions]);
+    if (!editingRole) return;
+    
+    // Use the API-integrated permission change handler
+    const roleId = editingRole.id || editingRole._id || '';
+    handlePermissionChange(roleId, module, submodule, action, checked);
+  }, [editingRole, handlePermissionChange]);
 
   const handleSelectAllEditingModulePermissions = useCallback((module: string, shouldSelect: boolean) => {
+    if (!editingRole || !editingRolePermissions) return;
+    
+    const roleId = editingRole.id || editingRole._id || '';
+    
+    // 🔥 BOOLEAN VALIDATION: Ensure shouldSelect is strictly boolean
+    const shouldSelectBoolean = shouldSelect === true;
+    
+    // 🔥 PERFORMANCE: Show immediate feedback
+    toast({
+      title: shouldSelectBoolean ? "✅ Selecting All Permissions" : "❌ Unselecting All Permissions",
+      description: `${shouldSelectBoolean ? 'Enabling' : 'Disabling'} all permissions in ${module} module...`,
+      duration: 1500,
+    });
+    
+    // Update local state immediately for responsive UI
     setEditingRolePermissions(prev => {
       if (!prev) return null;
       const newPermissions = JSON.parse(JSON.stringify(prev)); // Deep copy
       const modulePermissions = (newPermissions as any)[module];
+      
       if (modulePermissions) {
         Object.keys(modulePermissions).forEach(submodule => {
           Object.keys(modulePermissions[submodule]).forEach(action => {
-            modulePermissions[submodule][action] = shouldSelect;
+            // 🔥 BOOLEAN CONVERSION: Set strictly boolean value
+            modulePermissions[submodule][action] = shouldSelectBoolean;
           });
         });
       }
+      
       return newPermissions;
     });
-  }, [setEditingRolePermissions]);
+    
+    // 🔥 FIX: Save all permissions at once instead of individual API calls
+    // This is much more efficient and prevents API flooding
+    const updatedPermissions = { ...editingRolePermissions };
+    const modulePermissions = (updatedPermissions as any)[module];
+    
+    if (modulePermissions) {
+      Object.keys(modulePermissions).forEach(submodule => {
+        Object.keys(modulePermissions[submodule]).forEach(action => {
+          // 🔥 BOOLEAN CONVERSION: Set strictly boolean value
+          modulePermissions[submodule][action] = shouldSelectBoolean;
+        });
+      });
+      
+      // Save the entire updated permissions object
+      debouncedSavePermissions(roleId, updatedPermissions);
+    }
+  }, [editingRole, editingRolePermissions, setEditingRolePermissions, debouncedSavePermissions, toast]);
 
   const areAllEditingModulePermissionsSelected = (moduleKey: string): boolean => {
     if (!editingRolePermissions) return false;
@@ -576,64 +1609,6 @@ export default function RolesPermissions() {
     );
   };
 
-  const handleEditClick = (role: Role) => {
-    const fullPermissions = JSON.parse(JSON.stringify(ALL_POSSIBLE_PERMISSIONS));
-    
-    // Deep merge the role's permissions into the full structure
-    const mergePermissions = (target: any, source: any) => {
-        for (const key in source) {
-            if (source.hasOwnProperty(key)) {
-                if (source[key] instanceof Object && target.hasOwnProperty(key)) {
-                    mergePermissions(target[key], source[key]);
-                } else {
-                    target[key] = source[key];
-                }
-            }
-        }
-    };
-
-    if (role.permissions) {
-        mergePermissions(fullPermissions, role.permissions);
-    }
-    
-    setEditingRole(role);
-    setEditingRolePermissions(fullPermissions);
-    setIsEditModalOpen(true);
-  };
-
-  const handleUpdateRole = useCallback(async () => {
-    if (!editingRole || !editingRolePermissions) return;
-
-    try {
-      await updateRole(editingRole.name, editingRolePermissions);
-
-      const newHistoryEntry: RoleHistory = {
-        id: new Date().toISOString(),
-        roleName: editingRole.name,
-        action: 'updated',
-        changes: [{ field: 'permissions', oldValue: 'Previous permissions', newValue: 'New permissions set' }],
-        timestamp: new Date().toISOString(),
-        user: user?.email || 'System'
-      };
-      setRoleHistory(prev => [newHistoryEntry, ...prev]);
-
-      setIsEditModalOpen(false);
-      setEditingRole(null);
-      setEditingRolePermissions(null);
-      toast({
-        title: "Role Updated",
-        description: `Successfully updated the role: ${editingRole.name}`,
-      });
-    } catch (error) {
-      console.error('Failed to update role:', error);
-      toast({
-        title: "Update Failed",
-        description: "An error occurred while updating the role.",
-        variant: "destructive",
-      });
-    }
-  }, [editingRole, editingRolePermissions, updateRole, setRoleHistory, user, toast]);
-
   const handleAssignUserClick = (role: Role) => {
     setRoleToAssignUser(role);
     setIsAssignUserDialogOpen(true);
@@ -642,6 +1617,19 @@ export default function RolesPermissions() {
 
   const handleAssignRoleToUser = (userId: string) => {
     if (roleToAssignUser) {
+      // Prevent assigning Super Admin role to users (it's a system role)
+      const systemRoles = ['SUPER_ADMIN', 'Super Admin', 'super_admin'];
+      if (systemRoles.includes(roleToAssignUser.name) || systemRoles.some(role => role.toLowerCase() === roleToAssignUser.name.toLowerCase())) {
+        toast({
+          title: "🛡️ System Role Protected",
+          description: `Cannot assign system role "${roleToAssignUser.name}" to users. System roles are protected.`,
+          variant: "destructive",
+          duration: 5000,
+          className: "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200 text-black",
+        });
+        return;
+      }
+
       assignRoleToUser(userId, roleToAssignUser.name);
       toast({
         title: "User Assigned",
@@ -680,61 +1668,13 @@ export default function RolesPermissions() {
     }
   };
 
-  const handleCompareRoleToggle = (role: Role) => {
-    setRolesToCompare(prev =>
-      prev.some(r => r.id === role.id)
-        ? prev.filter(r => r.id !== role.id)
-        : [...prev, role]
-    );
-  };
-
-  const renderPermissionComparison = () => {
-    if (rolesToCompare.length < 2) return null;
-
-    return (
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Permission</TableHead>
-            {rolesToCompare.map(role => <TableHead key={role.id}>{role.name}</TableHead>)}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {Object.entries(permissionGroups).map(([groupKey, group]) => (
-            <React.Fragment key={groupKey}>
-              <TableRow>
-                <TableCell colSpan={rolesToCompare.length + 1} className="font-semibold bg-gray-50">
-                  {group.description}
-                </TableCell>
-              </TableRow>
-              {Object.entries(group.modules).map(([moduleKey, moduleName]) =>
-                Object.keys((ALL_POSSIBLE_PERMISSIONS as any)[groupKey][moduleKey]).map(action => (
-                  <TableRow key={`${groupKey}-${moduleKey}-${action}`}>
-                    <TableCell className="pl-8">{`${moduleName} - ${action}`}</TableCell>
-                    {rolesToCompare.map(role => {
-                      const hasPermission = !!(role.permissions as any)?.[groupKey]?.[moduleKey]?.[action];
-                      return (
-                        <TableCell key={`${role.id}-${moduleKey}-${action}`} className="text-center">
-                          {hasPermission ? <Check className="h-5 w-5 text-green-500 mx-auto" /> : <X className="h-5 w-5 text-red-500 mx-auto" />}
-                        </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                ))
-              )}
-            </React.Fragment>
-          ))}
-        </TableBody>
-      </Table>
-    );
-  };
-
-  const statCards = [
+      // 🚀 PERFORMANCE: Memoized stats cards data
+  const statCards = useMemo(() => [
     { title: 'Total Roles', value: roles.length, icon: <Users className="h-6 w-6 text-blue-500" /> },
     { title: 'Active Users', value: users.length, icon: <UserCheck className="h-6 w-6 text-green-500" /> },
     { title: 'Permission Groups', value: Object.keys(permissionGroups).length, icon: <Shield className="h-6 w-6 text-purple-500" /> },
     { title: 'Recent Changes', value: 3, icon: <History className="h-6 w-6 text-orange-500" /> }
-  ];
+  ], [roles.length, users.length]);
 
   return (
     <PermissionGuard requiredPermission={COMPONENT_PERMISSIONS.RolesPermissions}>
@@ -744,26 +1684,12 @@ export default function RolesPermissions() {
             <h1 className="text-3xl font-bold text-gray-900">Roles & Permissions</h1>
             <p className="text-gray-600 mt-2">Manage user roles and their associated permissions</p>
             </div>
-          <Button variant="outline" className="flex items-center gap-2" onClick={() => setIsCompareModalOpen(true)}>
-            <GitCompare className="h-4 w-4" />
-                Compare Roles
-              </Button>
           </div>
 
-        {/* Stats Cards */}
+        {/* 🚀 PERFORMANCE: Optimized Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {statCards.map(card => (
-            <Card key={card.title}>
-              <CardContent className="flex items-center justify-between p-6">
-                  <div>
-                  <p className="text-sm font-medium text-gray-500">{card.title}</p>
-                  <p className="text-3xl font-bold text-gray-800">{card.value}</p>
-                  </div>
-                <div className="p-3 bg-gray-100 rounded-lg">
-                  {card.icon}
-                </div>
-              </CardContent>
-            </Card>
+            <MemoizedStatsCard key={card.title} {...card} />
           ))}
           </div>
 
@@ -782,16 +1708,37 @@ export default function RolesPermissions() {
                     <CardTitle>Existing Roles</CardTitle>
                     <CardDescription>Manage permissions for existing roles</CardDescription>
                   </div>
-                  <div className="w-1/3">
+                  <div className="flex gap-2">
+                    <div className="w-64">
                     <Input
                       placeholder="Search roles..."
                       value={roleSearchTerm}
                       onChange={(e) => setRoleSearchTerm(e.target.value)}
                     />
+                    </div>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
+                {filteredRoles.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      {roleSearchTerm ? 'No roles found' : 'No roles available'}
+                    </h3>
+                    <p className="text-gray-500 mb-4">
+                      {roleSearchTerm 
+                        ? `No roles match "${roleSearchTerm}". Try a different search term.`
+                        : 'No roles have been created yet. Create your first role to get started.'
+                      }
+                    </p>
+                    {!roleSearchTerm && (
+                      <Button onClick={() => setRoleSearchTerm('')} className="bg-gray-900 hover:bg-gray-800 mt-4">
+                        <Plus className="mr-2 h-4 w-4" /> Create First Role
+                      </Button>
+                    )}
+                  </div>
+                ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -803,46 +1750,19 @@ export default function RolesPermissions() {
                   </TableHeader>
                   <TableBody>
                     {filteredRoles.map((role: Role) => (
-                      <TableRow key={role.id || role._id}>
-                        <TableCell><Badge variant="outline">{role.name}</Badge></TableCell>
-                        <TableCell>{role.description}</TableCell>
-                        <TableCell>
-                           <Button variant="link" className="p-0 h-auto" onClick={() => handleViewUsersClick(role)}>
-                            {userCountsByRole[role.name] || 0}
-                          </Button>
-                        </TableCell>
-                        <TableCell className="flex gap-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="flex items-center gap-1" 
-                            onClick={() => handleEditClick(role)}
-                            disabled={role.name.toLowerCase() === 'administrator'}
-                          >
-                              <Pencil className="h-3 w-3" /> Edit
-                          </Button>
-                          <Button 
-                            variant="destructive" 
-                            size="sm" 
-                            className="flex items-center gap-1" 
-                            onClick={() => handleDeleteRole(role)}
-                            disabled={role.name.toLowerCase() === 'administrator'}
-                          >
-                            <Trash2 className="h-3 w-3" /> Delete
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="flex items-center gap-1"
-                            onClick={() => handleAssignUserClick(role)}
-                          >
-                            <UserPlus className="h-3 w-3" /> Add User
-                          </Button>
-                        </TableCell>
-                      </TableRow>
+                      <MemoizedRoleRow
+                        key={role.id || role._id}
+                        role={role}
+                        userCount={userCountsByRole[role.name] || 0}
+                        onEdit={handleEditClick}
+                        onDelete={handleDeleteRole}
+                        onAssignUser={handleAssignUserClick}
+                        onViewUsers={handleViewUsersClick}
+                      />
                     ))}
                   </TableBody>
                 </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -889,67 +1809,33 @@ export default function RolesPermissions() {
                   />
                 </div>
 
+                    {/* Role Description */}
+                    <div className="space-y-2">
+                      <Label htmlFor="roleDescription" className="text-base font-semibold">Role Description</Label>
+                      <Input
+                        id="roleDescription"
+                        value={newRoleDescription}
+                        onChange={(e) => setNewRoleDescription(e.target.value)}
+                        placeholder="Enter a description for the role"
+                  />
+                </div>
+
                     {/* Assign Permissions */}
                     <div>
                          <Label className="text-base font-semibold">Assign Permissions</Label>
                          <Accordion type="multiple" className="w-full mt-2 space-y-3">
                             {Object.entries(permissionGroups).map(([groupKey, group]) => (
-                                <AccordionItem key={groupKey} value={groupKey} className="border rounded-lg">
-                                    <AccordionTrigger className="p-4 hover:no-underline">
-                              <div className="flex items-center justify-between w-full">
-                                            <div className="flex items-center gap-3">
-                                                <span className="font-semibold">{group.description}</span>
-                                                <Badge variant="secondary">
-                                                  {countAssignedPermissions((newRolePermissions as any)[groupKey])} / {countTotalPermissionsInGroup((newRolePermissions as any)[groupKey])} permissions
-                                  </Badge>
-                                </div>
-                                            <div className="flex items-center gap-2 pr-2">
-                                  <Checkbox
-                                                    id={`select-all-${groupKey}`}
-                                                    checked={areAllModulePermissionsSelected(groupKey)}
-                                                    onCheckedChange={(checked) => handleSelectAllModulePermissions(groupKey, checked as boolean)}
-                                                 />
-                                                 <Label htmlFor={`select-all-${groupKey}`} className="text-sm">Select All</Label>
-                                </div>
-                              </div>
-                            </AccordionTrigger>
-                                    <AccordionContent className="p-4 pt-0">
-                                        <div className="space-y-4 pt-4 border-t">
-                                            {Object.entries(group.modules).map(([moduleKey, moduleName]) => (
-                                            <Card key={moduleKey}>
-                                                <CardHeader>
-                                                <CardTitle className="text-base">{moduleName}</CardTitle>
-                                                </CardHeader>
-                                                <CardContent>
-                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                                    {['view', 'create', 'edit', 'delete'].map((action) => (
-                                                    (newRolePermissions[groupKey as keyof UserPermissions] as any)?.[moduleKey]?.[action] !== undefined && (
-                                                        <div key={action} className="flex items-center space-x-2">
-                                        <Checkbox
-                                                            id={`${groupKey}-${moduleKey}-${action}`}
-                                                            checked={(newRolePermissions[groupKey as keyof UserPermissions] as any)?.[moduleKey]?.[action] || false}
-                                                            onCheckedChange={(checked) =>
-                                                            handleNewRolePermissionChange(
-                                                                groupKey,
-                                                                moduleKey,
-                                                                action,
-                                                                checked as boolean
-                                                            )
-                                                            }
-                                                        />
-                                                        <Label htmlFor={`${groupKey}-${moduleKey}-${action}`} className="capitalize">
-                                                            {action}
-                                                        </Label>
-                                        </div>
-                                                    )
-                                                    ))}
-                                      </div>
-                                                </CardContent>
-                                            </Card>
-                                            ))}
-                              </div>
-                            </AccordionContent>
-                          </AccordionItem>
+                                <MemoizedPermissionGroup
+                                  key={groupKey}
+                                  groupKey={groupKey}
+                                  group={group}
+                                  permissions={newRolePermissions}
+                                  onPermissionChange={handleNewRolePermissionChange}
+                                  onSelectAll={handleSelectAllModulePermissions}
+                                  areAllSelected={areAllModulePermissionsSelected(groupKey)}
+                                  assignedCount={countAssignedPermissions((newRolePermissions as any)[groupKey])}
+                                  totalCount={countTotalPermissionsInGroup((newRolePermissions as any)[groupKey])}
+                                />
                       ))}
                         </Accordion>
                 </div>
@@ -1034,81 +1920,69 @@ export default function RolesPermissions() {
         <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
           <DialogContent className="max-w-4xl">
             <DialogHeader>
-              <DialogTitle>Edit Role: {editingRole?.name}</DialogTitle>
+              <DialogTitle>Edit Role: {editingRole?.name || 'Unknown'}</DialogTitle>
               <DialogDescription>
-                Modify the permissions for the "{editingRole?.name}" role.
+                Modify the name, description, and permissions for the "{editingRole?.name || 'Unknown'}" role.
+                <span className="text-sm text-blue-600 ml-2">
+                  Changes are automatically saved to the backend.
+                </span>
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4 max-h-[60vh] overflow-y-auto">
+            <div className="py-4 max-h-[60vh] overflow-y-auto space-y-6">
+              {/* Role Name and Description Fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+                <div className="space-y-2">
+                  <Label htmlFor="editRoleName" className="text-sm font-semibold">Role Name</Label>
+                  <Input
+                    id="editRoleName"
+                    value={editingRoleName}
+                    onChange={(e) => setEditingRoleName(e.target.value)}
+                    placeholder="Enter role name"
+                  />
+                                    </div>
+                <div className="space-y-2">
+                  <Label htmlFor="editRoleDescription" className="text-sm font-semibold">Role Description</Label>
+                  <Input
+                    id="editRoleDescription"
+                    value={editingRoleDescription}
+                    onChange={(e) => setEditingRoleDescription(e.target.value)}
+                    placeholder="Enter role description"
+                  />
+                              </div>
+              </div>
+              
+              {/* Permissions Content - Always show, no loading state */}
               {editingRolePermissions && (
                  <Accordion type="multiple" className="w-full mt-2 space-y-3">
                     {Object.entries(permissionGroups).map(([groupKey, group]) => (
-                        <AccordionItem key={groupKey} value={groupKey} className="border rounded-lg">
-                            <AccordionTrigger className="p-4 hover:no-underline">
-                                <div className="flex items-center justify-between w-full">
-                                    <div className="flex items-center gap-3">
-                                        <span className="font-semibold">{group.description}</span>
-                                        <Badge variant="secondary">
-                                          {countAssignedPermissions((editingRolePermissions as any)[groupKey])} / {countTotalPermissionsInGroup((editingRolePermissions as any)[groupKey])} permissions
-                                        </Badge>
-              </div>
-                                    <div className="flex items-center gap-2 pr-2">
-                              <Checkbox
-                                            id={`select-all-edit-${groupKey}`}
-                                            checked={areAllEditingModulePermissionsSelected(groupKey)}
-                                            onCheckedChange={(checked) => handleSelectAllEditingModulePermissions(groupKey, checked as boolean)}
-                                         />
-                                         <Label htmlFor={`select-all-edit-${groupKey}`} className="text-sm">Select All</Label>
-                            </div>
-                          </div>
-                            </AccordionTrigger>
-                            <AccordionContent className="p-4 pt-0">
-                                <div className="space-y-4 pt-4 border-t">
-                                    {Object.entries(group.modules).map(([moduleKey, moduleName]) => (
-                                    <Card key={moduleKey}>
-                                        <CardHeader>
-                                        <CardTitle className="text-base">{moduleName}</CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                            {['view', 'create', 'edit', 'delete'].map((action) => (
-                                            (editingRolePermissions[groupKey as keyof UserPermissions] as any)?.[moduleKey]?.[action] !== undefined && (
-                                                <div key={action} className="flex items-center space-x-2">
-                              <Checkbox 
-                                                    id={`edit-${groupKey}-${moduleKey}-${action}`}
-                                                    checked={(editingRolePermissions[groupKey as keyof UserPermissions] as any)?.[moduleKey]?.[action] || false}
-                                                    onCheckedChange={(checked) =>
-                                                      handleEditRolePermissionChange(
-                                                        groupKey,
-                                                        moduleKey,
-                                                        action,
-                                                        checked as boolean
-                                                      )
-                                                    }
-                                                />
-                                                <Label htmlFor={`edit-${groupKey}-${moduleKey}-${action}`} className="capitalize">
-                                                    {action}
-                                                </Label>
-                            </div>
-                                            )
-                          ))}
-                        </div>
-                                        </CardContent>
-                                    </Card>
-                                    ))}
-                      </div>
-                            </AccordionContent>
-                        </AccordionItem>
+                        <MemoizedPermissionGroup
+                          key={groupKey}
+                          groupKey={groupKey}
+                          group={group}
+                          permissions={editingRolePermissions}
+                          onPermissionChange={handleEditRolePermissionChange}
+                          onSelectAll={handleSelectAllEditingModulePermissions}
+                          areAllSelected={areAllEditingModulePermissionsSelected(groupKey)}
+                          assignedCount={countAssignedPermissions((editingRolePermissions as any)?.[groupKey])}
+                          totalCount={countTotalPermissionsInGroup((editingRolePermissions as any)?.[groupKey])}
+                          isEditing={true}
+                        />
                     ))}
                 </Accordion>
               )}
                   </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>
+              <Button variant="outline" onClick={() => {
+                setIsEditModalOpen(false);
+                setEditingRole(null);
+                setEditingRolePermissions(null);
+                setEditingRoleName('');
+                setEditingRoleDescription('');
+              }}>
                   Cancel
                 </Button>
-              <Button onClick={handleUpdateRole}>
-                  Save Changes
+              <Button onClick={handleUpdateRole} disabled={!editingRolePermissions}>
+                Save Changes
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -1189,45 +2063,6 @@ export default function RolesPermissions() {
             </DialogContent>
           </Dialog>
 
-        {/* Compare Roles Dialog */}
-        <Dialog open={isCompareModalOpen} onOpenChange={setIsCompareModalOpen}>
-            <DialogContent className="max-w-6xl">
-                <DialogHeader>
-                    <DialogTitle>Compare Roles</DialogTitle>
-                    <DialogDescription>
-                        Select at least two roles to see a side-by-side comparison of their permissions.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="py-4">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                    {roles.map(role => (
-                      <div
-                        key={role.id}
-                        onClick={() => handleCompareRoleToggle(role)}
-                        className={cn(
-                          "p-4 border rounded-lg cursor-pointer transition-all",
-                          rolesToCompare.some(r => r.id === role.id) ? "border-blue-500 bg-blue-50" : "hover:bg-gray-50"
-                        )}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold">{role.name}</span>
-                          <Checkbox
-                            checked={rolesToCompare.some(r => r.id === role.id)}
-                            onCheckedChange={() => handleCompareRoleToggle(role)}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  {rolesToCompare.length > 0 && (
-                     <div className="max-h-[50vh] overflow-y-auto">
-                        {renderPermissionComparison()}
-                      </div>
-                  )}
-                </div>
-            </DialogContent>
-        </Dialog>
       </div>
     </PermissionGuard>
   );

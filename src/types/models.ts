@@ -325,6 +325,7 @@ export interface Role {
   name: string;
   description: string;
   permissions: Record<string, any>;
+  isActive?: boolean;
   createdAt: Date;
   updatedAt: Date;
   pending?: boolean;
@@ -453,4 +454,97 @@ export interface AuditLog {
   }[];
   metadata: Record<string, any>;
   createdAt: string;
+}
+
+// Recruitment Management
+export interface Candidate {
+  _id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  currentCompany?: string;
+  currentRole?: string;
+  experienceYears: number;
+  expectedSalary?: number;
+  noticePeriod?: string;
+  status: 'new' | 'interview' | 'rejected';
+  resumeLink?: string;
+  department?: string | null;
+  notes?: string;
+  createdBy: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+  timeline: TimelineEntry[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TimelineEntry {
+  _id: string;
+  type: 'candidate' | 'interview' | 'feedback' | 'status_change';
+  subType: string;
+  title: string;
+  description: string;
+  metadata?: Record<string, any>;
+  createdBy: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+  createdAt: string;
+}
+
+export interface CandidateFilters {
+  search?: string;
+  status?: string;
+  department?: string;
+  experienceYears?: number;
+  expectedSalaryMin?: number;
+  expectedSalaryMax?: number;
+  sortBy?: string;
+  sortDirection?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
+}
+
+export interface CandidatesResponse {
+  data: Candidate[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+export interface CreateCandidateRequest {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  currentCompany?: string;
+  currentRole?: string;
+  experienceYears: number;
+  expectedSalary?: number;
+  noticePeriod?: string;
+  resumeLink?: string;
+  department?: string;
+  notes?: string;
+}
+
+export interface UpdateCandidateRequest extends Partial<CreateCandidateRequest> {
+  status?: Candidate['status'];
+}
+
+export interface CandidateStats {
+  totalCandidates: number;
+  newCandidates: number;
+  inProcess: number;
+  hired: number;
+  rejected: number;
+  statusDistribution: { [key: string]: number };
+  departmentDistribution: { [key: string]: number };
 } 

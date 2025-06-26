@@ -1,4 +1,3 @@
-
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -31,8 +30,8 @@ import {
 // Define the department schema using Zod
 const departmentSchema = z.object({
   name: z.string().min(1, 'Department name is required'),
-  code: z.string().min(1, 'Department code is required'),
-  description: z.string().optional(),
+  code: z.string().optional(),
+  description: z.string().min(1, 'Description is required'),
   manager: z.string().optional(),
   location: z.string().optional(),
   budget: z.number().min(0).optional(),

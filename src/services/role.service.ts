@@ -32,15 +32,316 @@ interface DeleteRoleResponse {
   deletedRole?: any;
 }
 
+// 🔥 NEW: Permission mapping interface
+interface PermissionMapping {
+  [key: string]: string; // permission string -> permission ID
+}
+
+// 🔥 NEW: Cache for permission mappings
+let permissionMappingCache: PermissionMapping | null = null;
+
+// 🔥 NEW: Function to get permission mappings from API
+const getPermissionMapping = async (): Promise<PermissionMapping> => {
+  if (permissionMappingCache) {
+    console.log('📋 Using cached permission mappings');
+    return permissionMappingCache;
+  }
+
+  try {
+    console.log('🔍 Fetching permission mappings from API...');
+    
+    // Fetch all permissions from the permissions API
+    const response = await axiosInstance.get('/permissions');
+    
+    // 🔥 PERFORMANCE: Reduce logging in production
+    const isDev = process.env.NODE_ENV === 'development';
+    if (isDev) {
+    console.log('📋 Permissions API response:', response.data);
+    console.log('📋 Response type:', typeof response.data);
+    console.log('📋 Response keys:', Object.keys(response.data || {}));
+    }
+    
+    const mapping: PermissionMapping = {};
+    
+    // Handle the permissions API response structure
+    if (response.data && typeof response.data === 'object') {
+      if (isDev) console.log('📋 Response data is an object, processing...');
+      
+      // Check if response.data is empty
+      if (Object.keys(response.data).length === 0) {
+        console.log('⚠️ Response data is empty object!');
+        return mapping;
+      }
+      
+      // 🔥 FIX: Handle the actual API response structure
+      // Backend returns: { data: [permission objects], total, page, limit, hasMore }
+      if (response.data.data && Array.isArray(response.data.data)) {
+        console.log('📋 Found permissions data array with', response.data.data.length, 'permissions');
+        
+        response.data.data.forEach((permission: any, index: number) => {
+          if (isDev && index < 3) { // Only log first 3 in dev mode
+            console.log(`📋 Processing permission ${index + 1}:`, permission);
+          }
+          
+          if (permission && typeof permission === 'object') {
+            // Handle permission object structure: {_id, name, action, description, ...}
+            const permissionId = permission._id || permission.id;
+            const permissionName = permission.name; // e.g., "department.manage", "employees.view"
+            
+            if (permissionId && permissionName) {
+              // Map permission name directly to ID
+              mapping[permissionName] = permissionId;
+              if (isDev && index < 3) {
+                console.log(`📝 Mapped: ${permissionName} -> ${permissionId}`);
+              }
+              
+              // 🔥 ALSO: Create mappings in our expected format
+              // Convert "department.manage" to "employee_management.department.manage"
+              // Convert "employees.view" to "employee_management.employees.view"
+              const parts = permissionName.split('.');
+              if (parts.length === 2) {
+                const [module, action] = parts;
+                let fullPermissionName = '';
+                
+                // Map modules to our frontend structure
+                if (module === 'employees') {
+                  fullPermissionName = `employee_management.employees.${action}`;
+                } else if (module === 'department') {
+                  fullPermissionName = `employee_management.department.${action}`;
+                } else if (module === 'candidate') {
+                  fullPermissionName = `hiring.candidate.${action}`;
+                } else if (module === 'job') {
+                  fullPermissionName = `hiring.job.${action}`;
+                } else if (module === 'user') {
+                  fullPermissionName = `settings.user.${action}`;
+                } else if (module === 'role') {
+                  fullPermissionName = `settings.role.${action}`;
+                } else if (module === 'system') {
+                  fullPermissionName = `system.system.${action}`;
+                } else {
+                  // Fallback: try to guess the module group
+                  fullPermissionName = `${module}.${module}.${action}`;
+                }
+                
+                if (fullPermissionName) {
+                  mapping[fullPermissionName] = permissionId;
+                  if (isDev && index < 3) {
+                    console.log(`📝 Also mapped: ${fullPermissionName} -> ${permissionId}`);
+                  }
+                }
+              }
+            } else if (isDev) {
+              console.warn(`⚠️ Permission missing required fields:`, {
+                id: permissionId,
+                name: permissionName,
+                fullObject: permission
+              });
+            }
+          } else if (isDev) {
+            console.warn(`⚠️ Invalid permission object at index ${index}:`, permission);
+          }
+        });
+        
+        console.log('✅ Processed', response.data.data.length, 'permissions from API');
+      } else {
+        console.log('⚠️ No data array found in response, trying legacy parsing...');
+        
+        // Legacy parsing logic for nested structure (keep as fallback)
+      Object.entries(response.data).forEach(([module, moduleData]: [string, any]) => {
+          if (isDev) {
+        console.log(`📋 Processing module: "${module}"`, moduleData);
+        console.log(`📋 Module data type:`, typeof moduleData);
+        console.log(`📋 Module data keys:`, Object.keys(moduleData || {}));
+          }
+        
+        if (moduleData && typeof moduleData === 'object') {
+          Object.entries(moduleData).forEach(([submodule, permissions]: [string, any]) => {
+              if (isDev) {
+            console.log(`📋 Processing submodule: "${module}.${submodule}"`, permissions);
+            console.log(`📋 Submodule data type:`, typeof permissions);
+            console.log(`📋 Is array?:`, Array.isArray(permissions));
+              }
+            
+            if (Array.isArray(permissions)) {
+                if (isDev) console.log(`📋 Processing ${permissions.length} permissions in array`);
+              permissions.forEach((permission: any, index: number) => {
+                  if (isDev && index < 2) {
+                console.log(`📋 Processing permission ${index}:`, permission);
+                console.log(`📋 Permission keys:`, Object.keys(permission || {}));
+                  }
+                
+                // Handle different permission object structures
+                if (permission.id && permission.action) {
+                  const permissionString = `${module}.${submodule}.${permission.action}`;
+                  mapping[permissionString] = permission.id;
+                    if (isDev && index < 2) {
+                  console.log(`📝 Mapped: ${permissionString} -> ${permission.id}`);
+                    }
+                } else if (permission._id && permission.action) {
+                  const permissionString = `${module}.${submodule}.${permission.action}`;
+                  mapping[permissionString] = permission._id;
+                    if (isDev && index < 2) {
+                  console.log(`📝 Mapped: ${permissionString} -> ${permission._id}`);
+                    }
+                } else if (permission.id && permission.name) {
+                  // Handle alternative naming
+                  const permissionString = `${module}.${submodule}.${permission.name}`;
+                  mapping[permissionString] = permission.id;
+                    if (isDev && index < 2) {
+                  console.log(`📝 Mapped: ${permissionString} -> ${permission.id}`);
+                    }
+                  } else if (isDev) {
+                  console.log(`⚠️ Permission object doesn't have expected structure:`, permission);
+                  console.log(`⚠️ Expected: {id/_id: string, action/name: string}`);
+                }
+              });
+              } else if (isDev) {
+              console.log(`⚠️ Submodule data is not an array:`, permissions);
+            }
+          });
+          } else if (isDev) {
+          console.log(`⚠️ Module data is not an object:`, moduleData);
+        }
+      });
+      }
+    } else {
+      console.log('⚠️ Response data is not an object:', response.data);
+    }
+    
+    console.log('🎯 Final permission mapping:', Object.keys(mapping).length, 'mappings found');
+    
+    // Log specific permissions we're looking for (only in dev)
+    if (isDev) {
+    const searchPermissions = [
+      'employee_management.employees.view',
+      'employee_management.employees.create',
+      'employee_management.department.manage',
+      'hiring.candidate.view',
+      'settings.user.view',
+      'system.system.admin'
+    ];
+    
+    console.log('🔍 Checking for specific permissions:');
+    searchPermissions.forEach(perm => {
+      if (mapping[perm]) {
+        console.log(`✅ Found: ${perm} -> ${mapping[perm]}`);
+      } else {
+        console.log(`❌ Missing: ${perm}`);
+      }
+    });
+    }
+    
+    permissionMappingCache = mapping;
+    return mapping;
+    
+  } catch (error: any) {
+    console.error('❌ Failed to fetch permission mappings:', error);
+    console.error('❌ Error details:', error.response?.data);
+    throw new Error('Failed to fetch permission mappings from server');
+  }
+};
+
+// 🔥 NEW: Function to convert permission strings to IDs
+const convertPermissionStringsToIds = async (permissionStrings: string[]): Promise<string[]> => {
+  try {
+    const mapping = await getPermissionMapping();
+    const permissionIds: string[] = [];
+    
+    console.log('🔄 Converting permission strings to IDs...');
+    console.log('📝 Input strings:', permissionStrings);
+    
+    permissionStrings.forEach(permissionString => {
+      const permissionId = mapping[permissionString];
+      if (permissionId) {
+        permissionIds.push(permissionId);
+        console.log(`✅ Converted: ${permissionString} -> ${permissionId}`);
+      } else {
+        console.warn(`⚠️ No ID found for permission: ${permissionString}`);
+        console.warn(`⚠️ Available permissions:`, Object.keys(mapping));
+      }
+    });
+    
+    console.log('🎯 Final permission IDs:', permissionIds);
+    return permissionIds;
+    
+  } catch (error) {
+    console.error('❌ Failed to convert permission strings to IDs:', error);
+    throw error;
+  }
+};
+
+// 🔥 NEW: Function to clear permission mapping cache
+const clearPermissionMappingCache = () => {
+  console.log('🗑️ Clearing permission mapping cache...');
+  permissionMappingCache = null;
+};
+
 export const roleService = {
   // Create a new role
   createRole: async (roleData: Partial<Role>) => {
-    // Debug: Log the token and request body
-    const token = localStorage.getItem('accessToken');
-    console.log('Creating role with token:', token);
-    console.log('Role data:', roleData);
-    const response = await axiosInstance.post<Role>('/roles', roleData);
-    return response.data;
+    try {
+      console.log('=== roleService.createRole ===');
+      console.log('Role data being sent:', JSON.stringify(roleData, null, 2));
+      
+      // Transform permissions if needed
+      const backendData: any = { ...roleData };
+      
+      if (roleData.permissions) {
+        if (Array.isArray(roleData.permissions)) {
+          // Check if permissions are already IDs (24-character hex strings) or permission strings
+          const firstPermission = roleData.permissions[0];
+          const isAlreadyIds = firstPermission && typeof firstPermission === 'string' && 
+                             firstPermission.length === 24 && /^[0-9a-fA-F]{24}$/.test(firstPermission);
+          
+          if (!isAlreadyIds) {
+            console.log('🔄 Converting permission strings to IDs for create...');
+            try {
+              const permissionIds = await convertPermissionStringsToIds(roleData.permissions);
+              backendData.permissions = permissionIds;
+              console.log('✅ Successfully converted permissions to IDs:', permissionIds);
+            } catch (error) {
+              console.error('❌ Failed to convert permissions to IDs:', error);
+              throw new Error('Failed to convert permissions to IDs. Please try again.');
+            }
+          }
+        } else {
+          // Convert object format to permission IDs
+          console.log('🔄 Converting permissions object to IDs for create...');
+          const permissionsArray: string[] = [];
+          
+          Object.entries(roleData.permissions).forEach(([module, modulePerms]: [string, any]) => {
+            if (modulePerms && typeof modulePerms === 'object') {
+              Object.entries(modulePerms).forEach(([submodule, submodulePerms]: [string, any]) => {
+                if (submodulePerms && typeof submodulePerms === 'object') {
+                  Object.entries(submodulePerms).forEach(([action, hasPermission]: [string, any]) => {
+                    if (hasPermission === true) {
+                      permissionsArray.push(`${module}.${submodule}.${action}`);
+                    }
+                  });
+                }
+              });
+            }
+          });
+          
+          try {
+            const permissionIds = await convertPermissionStringsToIds(permissionsArray);
+            backendData.permissions = permissionIds;
+            console.log('✅ Successfully converted object permissions to IDs:', permissionIds);
+          } catch (error) {
+            console.error('❌ Failed to convert object permissions to IDs:', error);
+            throw new Error('Failed to convert permissions to IDs. Please try again.');
+          }
+        }
+      }
+      
+      console.log('📤 Final backend data for create:', JSON.stringify(backendData, null, 2));
+      
+      const response = await axiosInstance.post<Role>('/roles', backendData);
+      return response.data;
+    } catch (error: any) {
+      console.error('roleService.createRole error:', error);
+      throw error;
+    }
   },
 
   // Get all roles with pagination
@@ -57,8 +358,107 @@ export const roleService = {
 
   // Update a role
   updateRole: async (id: string, roleData: Partial<Role>) => {
-    const response = await axiosInstance.patch<Role>(`/roles/${id}`, roleData);
-    return response.data;
+    console.log('=== roleService.updateRole ===');
+    console.log('Role ID:', id);
+    console.log('Role data being sent:', JSON.stringify(roleData, null, 2));
+    
+    // Log the request details
+    const token = localStorage.getItem('accessToken');
+    console.log('Auth token:', token ? 'Present' : 'Missing');
+    console.log('Request URL:', `/roles/${id}`);
+    console.log('Request method: PATCH');
+    console.log('Request body:', roleData);
+    
+    // Transform data to backend expected format
+    const backendData: any = {};
+    
+    // Always include required fields
+    if (roleData.name) {
+      backendData.name = roleData.name;
+    }
+    
+    if (roleData.description !== undefined) {
+      backendData.description = roleData.description || '';
+    }
+    
+    // Handle permissions - convert to permission IDs
+    if (roleData.permissions) {
+      if (Array.isArray(roleData.permissions)) {
+        // Check if permissions are already IDs or permission strings
+        const firstPermission = roleData.permissions[0];
+        const isAlreadyIds = firstPermission && typeof firstPermission === 'string' && 
+                           firstPermission.length === 24 && /^[0-9a-fA-F]{24}$/.test(firstPermission);
+        
+        if (isAlreadyIds) {
+          console.log('✅ Permissions are already in ID format');
+          backendData.permissions = roleData.permissions;
+        } else {
+          console.log('🔄 Converting permission strings to IDs...');
+          try {
+            const permissionIds = await convertPermissionStringsToIds(roleData.permissions);
+            backendData.permissions = permissionIds;
+            console.log('✅ Successfully converted permissions to IDs:', permissionIds);
+          } catch (error) {
+            console.error('❌ Failed to convert permissions to IDs:', error);
+            throw new Error('Failed to convert permissions to IDs. Please try again.');
+          }
+        }
+      } else {
+        // Convert object format to array format first, then to IDs
+        console.log('🔄 Converting permissions object to array format, then to IDs');
+        const permissionsArray: string[] = [];
+        
+        Object.entries(roleData.permissions).forEach(([module, modulePerms]: [string, any]) => {
+          if (modulePerms && typeof modulePerms === 'object') {
+            Object.entries(modulePerms).forEach(([submodule, submodulePerms]: [string, any]) => {
+              if (submodulePerms && typeof submodulePerms === 'object') {
+                Object.entries(submodulePerms).forEach(([action, hasPermission]: [string, any]) => {
+                  if (hasPermission === true) {
+                    permissionsArray.push(`${module}.${submodule}.${action}`);
+                  }
+                });
+              }
+            });
+          }
+        });
+        
+        console.log('🎯 Converted permissions to array:', permissionsArray);
+        
+        try {
+          const permissionIds = await convertPermissionStringsToIds(permissionsArray);
+          backendData.permissions = permissionIds;
+          console.log('✅ Successfully converted object permissions to IDs:', permissionIds);
+        } catch (error) {
+          console.error('❌ Failed to convert object permissions to IDs:', error);
+          throw new Error('Failed to convert permissions to IDs. Please try again.');
+        }
+      }
+    }
+    
+    // Always include isActive field (default to true)
+    backendData.isActive = roleData.isActive !== undefined ? roleData.isActive : true;
+    
+    console.log('📤 Final backend data:', JSON.stringify(backendData, null, 2));
+    
+    try {
+      const response = await axiosInstance.patch<Role>(`/roles/${id}`, backendData);
+      console.log('Update role response status:', response.status);
+      console.log('Update role response data:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('roleService.updateRole error:', error);
+      console.error('Error response status:', error.response?.status);
+      console.error('Error response data:', error.response?.data);
+      
+      // Log the exact error message from backend
+      if (error.response?.data) {
+        console.error('🚨 Backend Error Details:');
+        console.error('🚨 Full error data:', JSON.stringify(error.response.data, null, 2));
+        console.error('🚨 Error message:', error.response.data.message);
+      }
+      
+      throw error;
+    }
   },
 
   // Delete a role with improved error handling
@@ -126,7 +526,69 @@ export const roleService = {
 
   // Update role permissions
   updateRolePermissions: async (roleId: string, permissions: UserPermissions): Promise<Role> => {
-    const response = await axiosInstance.patch<Role>(`/roles/${roleId}/permissions`, { permissions });
-    return response.data;
-  }
+    try {
+      console.log('=== roleService.updateRolePermissions ===');
+      console.log('Role ID:', roleId);
+      console.log('Permissions:', JSON.stringify(permissions, null, 2));
+      
+      // Convert permissions object to permission IDs
+      const permissionsArray: string[] = [];
+      
+      Object.entries(permissions).forEach(([module, modulePerms]: [string, any]) => {
+        if (modulePerms && typeof modulePerms === 'object') {
+          Object.entries(modulePerms).forEach(([submodule, submodulePerms]: [string, any]) => {
+            if (submodulePerms && typeof submodulePerms === 'object') {
+              Object.entries(submodulePerms).forEach(([action, hasPermission]: [string, any]) => {
+                if (hasPermission === true) {
+                  permissionsArray.push(`${module}.${submodule}.${action}`);
+                }
+              });
+            }
+          });
+        }
+      });
+      
+      console.log('🎯 Converted permissions to array:', permissionsArray);
+      
+      // Convert permission strings to IDs
+      const permissionIds = await convertPermissionStringsToIds(permissionsArray);
+      console.log('✅ Converted permissions to IDs:', permissionIds);
+      
+      // Use the general updateRole endpoint with permissions data
+      const response = await axiosInstance.patch<Role>(`/roles/${roleId}`, { 
+        permissions: permissionIds 
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('roleService.updateRolePermissions error:', error);
+      
+      // If the specific permissions endpoint doesn't exist, try the permissions API directly
+      if (error.response?.status === 404) {
+        console.log('Trying alternative permissions endpoint...');
+        try {
+          // Alternative: try updating through permissions API
+          const permissionsResponse = await axiosInstance.patch<UserPermissions>(`/permissions/role/${roleId}`, permissions);
+          
+          // Return a role-like object since permissions endpoint might not return full role
+          return {
+            id: roleId,
+            _id: roleId,
+            name: 'Updated Role',
+            description: '',
+            permissions: permissionsResponse.data,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          } as Role;
+        } catch (altError: any) {
+          console.error('Alternative permissions update also failed:', altError);
+          throw error; // Throw the original error
+        }
+      }
+      
+      throw error;
+    }
+  },
+
+  // Clear permission mapping cache
+  clearPermissionCache: clearPermissionMappingCache
 };

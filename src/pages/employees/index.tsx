@@ -118,7 +118,7 @@ export default function EmployeesPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Roles</SelectItem>
-            <SelectItem value="Admin">Admin</SelectItem>
+            <SelectItem value="Super Admin">Super Admin</SelectItem>
             <SelectItem value="Manager">Manager</SelectItem>
             <SelectItem value="Employee">Employee</SelectItem>
             <SelectItem value="Intern">Intern</SelectItem>

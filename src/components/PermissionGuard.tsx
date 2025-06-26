@@ -23,8 +23,8 @@ export function PermissionGuard({
   const { toast } = useToast();
 
   const checkPermissions = React.useCallback(() => {
-    // Administrator role has full access to everything
-    if (user?.role === 'Administrator' || user?.role === 'ADMIN') {
+    // Super Admin role has full access to everything (system role)
+    if (user?.role === 'Super Admin' || user?.role === 'SUPER_ADMIN' || user?.role === 'super_admin') {
       return true;
     }
     

@@ -1,36 +1,34 @@
-import { PERMISSIONS } from '@/contexts/AuthContext';
-
 export const COMPONENT_PERMISSIONS = {
-  // Dashboard Components - using employee view as default dashboard permission
-  Dashboard: PERMISSIONS.EMPLOYEE_VIEW,
+  // Dashboard Components - using dashboard view permission
+  Dashboard: 'dashboard.dashboard.view',
   
   // Employee Management Components
-  EmployeeList: PERMISSIONS.EMPLOYEE_VIEW,
-  EmployeeDetails: PERMISSIONS.EMPLOYEE_VIEW,
-  EmployeeForm: PERMISSIONS.EMPLOYEE_CREATE,
-  DepartmentList: PERMISSIONS.DEPARTMENT_VIEW,
-  DepartmentForm: PERMISSIONS.DEPARTMENT_CREATE,
-  AttendanceList: PERMISSIONS.ATTENDENCE_VIEW,
-  AttendanceForm: PERMISSIONS.ATTENDENCE_CREATE,
-  PerformanceList: PERMISSIONS.PERFORMANCE_VIEW,
-  PerformanceForm: PERMISSIONS.PERFORMANCE_CREATE,
-  LeaveList: PERMISSIONS.LEAVE_VIEW,
-  LeaveForm: PERMISSIONS.LEAVE_CREATE,
+  EmployeeList: 'employeemanagement.employee.view',
+  EmployeeDetails: 'employeemanagement.employee.view',
+  EmployeeForm: 'employeemanagement.employee.create',
+  DepartmentList: 'employeemanagement.department.view',
+  DepartmentForm: 'employeemanagement.department.create',
+  AttendanceList: 'employeemanagement.attendence.view',
+  AttendanceForm: 'employeemanagement.attendence.create',
+  PerformanceList: 'employeemanagement.performance.view',
+  PerformanceForm: 'employeemanagement.performance.create',
+  LeaveList: 'employeemanagement.leave.view',
+  LeaveForm: 'employeemanagement.leave.create',
   
   // Hiring Components
-  JobList: PERMISSIONS.JOB_VIEW,
-  JobForm: PERMISSIONS.JOB_CREATE,
-  CandidateList: PERMISSIONS.CANDIDATE_VIEW,
-  CandidateForm: PERMISSIONS.CANDIDATE_CREATE,
-  InterviewList: PERMISSIONS.INTERVIEW_VIEW,
-  InterviewForm: PERMISSIONS.INTERVIEW_CREATE,
-  OnboardingList: PERMISSIONS.ONBOARDING_VIEW,
-  OnboardingForm: PERMISSIONS.ONBOARDING_CREATE,
+  JobList: 'hiring.job.view',
+  JobForm: 'hiring.job.create',
+  CandidateList: 'hiring.candidate.view',
+  CandidateForm: 'hiring.candidate.create',
+  InterviewList: 'hiring.interview.view',
+  InterviewForm: 'hiring.interview.create',
+  OnboardingList: 'hiring.onboarding.view',
+  OnboardingForm: 'hiring.onboarding.create',
   
   // Settings Components
-  CompanyProfile: PERMISSIONS.COMPANYPROFILE_VIEW,
-  CompanyProfileForm: PERMISSIONS.COMPANYPROFILE_EDIT,
-  RolesPermissions: PERMISSIONS.ROLESPERMISIONS_VIEW,
-  SystemSettings: PERMISSIONS.SYSTEMSETTINGS_VIEW,
-  SystemSettingsForm: PERMISSIONS.SYSTEMSETTINGS_EDIT,
+  CompanyProfile: 'settings.companyprofile.view',
+  CompanyProfileForm: 'settings.companyprofile.edit',
+  RolesPermissions: 'settings.rolespermisions.view',
+  SystemSettings: 'settings.systemsettings.view',
+  SystemSettingsForm: 'settings.systemsettings.edit',
 } as const; 

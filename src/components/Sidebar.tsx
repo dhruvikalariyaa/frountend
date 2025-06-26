@@ -32,11 +32,12 @@ interface MenuItem {
   title: string;
   icon: React.ReactNode;
   href: string;
-  permission?: string;
+  module?: string;
   subItems?: {
     title: string;
     href: string;
-    permission?: string;
+    module?: string;
+    subModule?: string;
   }[];
 }
 
@@ -56,38 +57,43 @@ export default function Sidebar() {
       title: "Dashboard",
       icon: <LayoutDashboard className="h-5 w-5" />,
       href: "/dashboard",
-      permission: "dashboard",
+      module: "dashboard",
     },
     {
       title: "Employee Management",
       icon: <Users className="h-5 w-5" />,
       href: "/employees",
-      permission: "employeemanagement",
+      module: "employeemanagement",
       subItems: [
         {
           title: "All Employees",
           href: "/employees",
-          permission: "VIEW_EMPLOYEES",
+          module: "employeemanagement",
+          subModule: "employee",
         },
         {
           title: "Departments",
           href: "/employees/departments",
-          permission: "VIEW_DEPARTMENTS",
+          module: "employeemanagement",
+          subModule: "department",
         },
         {
           title: "Attendance",
           href: "/employees/attendance",
-          permission: "VIEW_ATTENDANCE",
+          module: "employeemanagement",
+          subModule: "attendence",
         },
         {
           title: "Performance",
           href: "/employees/performance",
-          permission: "VIEW_PERFORMANCE",
+          module: "employeemanagement",
+          subModule: "performance",
         },
         {
           title: "Leave Management",
           href: "/employees/leaves",
-          permission: "VIEW_LEAVE",
+          module: "employeemanagement",
+          subModule: "leave",
         },
       ],
     },
@@ -95,27 +101,31 @@ export default function Sidebar() {
       title: "Hiring",
       icon: <UserPlus className="h-5 w-5" />,
       href: "/hiring",
-      permission: "hiring",
+      module: "hiring",
       subItems: [
         {
           title: "Job Postings",
           href: "/hiring/jobs",
-          permission: "VIEW_JOBS",
+          module: "hiring",
+          subModule: "job",
         },
         {
           title: "Candidates",
           href: "/hiring/candidates",
-          permission: "VIEW_CANDIDATES",
+          module: "hiring",
+          subModule: "candidate",
         },
         {
           title: "Interviews",
           href: "/hiring/interviews",
-          permission: "VIEW_INTERVIEWS",
+          module: "hiring",
+          subModule: "interview",
         },
         {
           title: "Onboarding",
           href: "/hiring/onboarding",
-          permission: "VIEW_ONBOARDING",
+          module: "hiring",
+          subModule: "onboarding",
         },
       ],
     },
@@ -123,37 +133,43 @@ export default function Sidebar() {
       title: "Projects",
       icon: <Briefcase className="h-5 w-5" />,
       href: "/projects",
-      permission: "projects",
+      module: "projects",
       subItems: [
         {
           title: "All Projects",
           href: "/projects",
-          permission: "VIEW_PROJECTS",
+          module: "projects",
+          subModule: "project",
         },
         {
           title: "Tasks",
           href: "/projects/tasks",
-          permission: "VIEW_PROJECT_DETAILS",
+          module: "projects",
+          subModule: "task",
         },
         {
           title: "Sprints",
           href: "/projects/sprints",
-          permission: "VIEW_SPRINT_DETAILS",
+          module: "projects",
+          subModule: "sprint",
         },
         {
           title: "Timeline",
           href: "/projects/timeline",
-          permission: "VIEW_TIMELINE",
+          module: "projects",
+          subModule: "timeline",
         },
         {
           title: "Resources",
           href: "/projects/resources",
-          permission: "VIEW_RESOURCES",
+          module: "projects",
+          subModule: "resource",
         },
         {
           title: "Deliverables",
           href: "/projects/deliverables",
-          permission: "VIEW_DELIVERABLES",
+          module: "projects",
+          subModule: "deliverable",
         },
       ],
     },
@@ -161,27 +177,31 @@ export default function Sidebar() {
       title: "Sales & Clients",
       icon: <Building2 className="h-5 w-5" />,
       href: "/sales",
-      permission: "sales",
+      module: "sales",
       subItems: [
         {
           title: "Clients",
           href: "/sales/clients",
-          permission: "VIEW_CLIENTS",
+          module: "sales",
+          subModule: "client",
         },
         {
           title: "Proposals",
           href: "/sales/proposals",
-          permission: "VIEW_PROPOSALS",
+          module: "sales",
+          subModule: "proposal",
         },
         {
           title: "Contracts",
           href: "/sales/contracts",
-          permission: "VIEW_CONTRACTS",
+          module: "sales",
+          subModule: "contract",
         },
         {
           title: "Revenue",
           href: "/sales/revenue",
-          permission: "VIEW_REVENUE_DETAILS",
+          module: "sales",
+          subModule: "revenue",
         },
       ],
     },
@@ -189,22 +209,25 @@ export default function Sidebar() {
       title: "Assets",
       icon: <Package className="h-5 w-5" />,
       href: "/assets",
-      permission: "assets",
+      module: "assets",
       subItems: [
         {
           title: "All Assets",
           href: "/assets",
-          permission: "VIEW_ASSETS",
+          module: "assets",
+          subModule: "asset",
         },
         {
           title: "Licenses",
           href: "/assets/licenses",
-          permission: "VIEW_LICENSES",
+          module: "assets",
+          subModule: "license",
         },
         {
           title: "Maintenance",
           href: "/assets/maintenance",
-          permission: "VIEW_MAINTENANCE",
+          module: "assets",
+          subModule: "maintenance",
         },
       ],
     },
@@ -212,27 +235,31 @@ export default function Sidebar() {
       title: "Finance",
       icon: <Wallet className="h-5 w-5" />,
       href: "/finance",
-      permission: "finance",
+      module: "finance",
       subItems: [
         {
           title: "Invoices",
           href: "/finance/invoices",
-          permission: "VIEW_INVOICES",
+          module: "finance",
+          subModule: "invoice",
         },
         {
           title: "Expenses",
           href: "/finance/expenses",
-          permission: "VIEW_EXPENSES",
+          module: "finance",
+          subModule: "expense",
         },
         {
           title: "Payroll",
           href: "/finance/payroll",
-          permission: "VIEW_PAYROLL",
+          module: "finance",
+          subModule: "payroll",
         },
         {
           title: "Reports",
           href: "/finance/reports",
-          permission: "VIEW_REPORTS",
+          module: "finance",
+          subModule: "report",
         },
       ],
     },
@@ -240,22 +267,25 @@ export default function Sidebar() {
       title: "Settings",
       icon: <Settings className="h-5 w-5" />,
       href: "/settings",
-      permission: "settings",
+      module: "settings",
       subItems: [
         {
           title: "Company Profile",
           href: "/settings/company",
-          permission: "VIEW_COMPANY_PROFILE",
+          module: "settings",
+          subModule: "companyprofile",
         },
         {
           title: "Roles & Permissions",
           href: "/settings/roles",
-          permission: "MANAGE_ROLES",
+          module: "settings",
+          subModule: "rolespermisions",
         },
         {
           title: "System Settings",
           href: "/settings/system",
-          permission: "VIEW_SYSTEM_SETTINGS",
+          module: "settings",
+          subModule: "systemsettings",
         },
       ],
     },
@@ -301,14 +331,32 @@ export default function Sidebar() {
     );
   };
 
-  const handleNavigation = (href: string, permission?: string) => {
-    // Administrator role has full access to everything
-    if (user?.role === 'Administrator' || user?.role === 'ADMIN') {
+  // Check if user has view permission for a module/submodule
+  const hasViewPermission = (module?: string, subModule?: string): boolean => {
+    if (!module) return true;
+    
+    // Super Admin role has full access to everything (system role)
+    if (user?.role === 'Super Admin' || user?.role === 'SUPER_ADMIN' || user?.role === 'super_admin') {
+      return true;
+    }
+
+    if (subModule) {
+      // Check specific submodule view permission
+      return hasModulePermission(module, 'view') || hasPermission(`${module}.${subModule}.view`);
+    } else {
+      // Check module view permission
+      return hasModulePermission(module, 'view');
+    }
+  };
+
+  const handleNavigation = (href: string, module?: string, subModule?: string) => {
+    // Super Admin role has full access to everything (system role)
+    if (user?.role === 'Super Admin' || user?.role === 'SUPER_ADMIN' || user?.role === 'super_admin') {
       navigate(href);
       return;
     }
     
-    if (permission && !hasPermission(permission)) {
+    if (!hasViewPermission(module, subModule)) {
       toast({
         title: "Access Denied",
         description: "You do not have permission to access this page.",
@@ -320,18 +368,18 @@ export default function Sidebar() {
   };
 
   const filteredItems = menuItems.filter(item => {
-    // If there's no permission required, show the item.
-    if (!item.permission) return true;
+    // If there's no module required, show the item
+    if (!item.module) return true;
 
-    // For top-level items, check for module view permission.
-    return hasModulePermission(item.permission, 'view');
+    // Check if user has view permission for the module
+    return hasViewPermission(item.module);
   })
   .map(item => {
-    // If search query is empty, return the item and all its sub-items that the user has permission to see.
+    // If search query is empty, return the item and all its sub-items that the user has permission to see
     if (!searchQuery) {
       if (item.subItems) {
         const accessibleSubItems = item.subItems.filter(subItem => 
-          !subItem.permission || hasPermission(subItem.permission)
+          hasViewPermission(subItem.module, subItem.subModule)
         );
         return { ...item, subItems: accessibleSubItems };
       }
@@ -344,9 +392,9 @@ export default function Sidebar() {
     if (item.subItems) {
       const matchingSubItems = item.subItems.filter(subItem => 
         subItem.title.toLowerCase().includes(searchLower) &&
-        (!subItem.permission || hasPermission(subItem.permission))
+        hasViewPermission(subItem.module, subItem.subModule)
       );
-      // If parent or any sub-item matches, show it with only matching sub-items.
+      // If parent or any sub-item matches, show it with only matching sub-items
       if (selfMatch || matchingSubItems.length > 0) {
         return { ...item, subItems: matchingSubItems };
       }
@@ -354,7 +402,7 @@ export default function Sidebar() {
       return item;
     }
 
-    return null; // Don't include the item if no part of it matches the search.
+    return null; // Don't include the item if no part of it matches the search
   }).filter(Boolean) as MenuItem[];
 
   const renderMenuItem = (item: MenuItem, isSubItem = false) => {
@@ -383,7 +431,7 @@ export default function Sidebar() {
                   if (item.subItems) {
                     toggleItem(item.title);
                   } else {
-                    handleNavigation(item.href, item.permission);
+                    handleNavigation(item.href, item.module);
                   }
                 }}
               >
@@ -444,7 +492,8 @@ export default function Sidebar() {
                         onClick={() =>
                           handleNavigation(
                             subItem.href,
-                            subItem.permission
+                            subItem.module,
+                            subItem.subModule
                           )
                         }
                       >

@@ -2,8 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/ui/use-toast';
 import { authService } from '../services/auth.service';
-import { roleService } from '../services/role.service';
 import { permissionService, UserPermissions } from '../services/permission.service';
+import { roleService } from '../services/role.service';
 import { Role } from '../types/models';
 
 interface User {
@@ -29,6 +29,8 @@ interface AuthContextType {
   hasModulePermission: (module: string, action: string) => boolean;
   updateUserRole: (userId: string, role: string) => void;
   updateUserPermissions: (permissions: UserPermissions) => void;
+  refreshUserPermissions: () => Promise<void>;
+  refreshRoles: () => Promise<void>;
   users: MockUser[];
   roles: Role[];
   userRoles: Record<string, string>;
@@ -41,81 +43,56 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// Define all available permissions based on the new API structure
+// Define all available permissions based on the backend API structure
 export const PERMISSIONS = {
-  // Hiring Management
+  // Employee Management
+  EMPLOYEES_VIEW: 'EMPLOYEES_VIEW',
+  EMPLOYEES_CREATE: 'EMPLOYEES_CREATE',
+  EMPLOYEES_EDIT: 'EMPLOYEES_EDIT',
+  EMPLOYEES_DELETE: 'EMPLOYEES_DELETE',
+  
+  DEPARTMENT_MANAGE: 'DEPARTMENT_MANAGE',
+ 
+  
+  // Hiring
   CANDIDATE_VIEW: 'CANDIDATE_VIEW',
   CANDIDATE_CREATE: 'CANDIDATE_CREATE',
   CANDIDATE_EDIT: 'CANDIDATE_EDIT',
   CANDIDATE_DELETE: 'CANDIDATE_DELETE',
   
-  INTERVIEW_VIEW: 'INTERVIEW_VIEW',
-  INTERVIEW_CREATE: 'INTERVIEW_CREATE',
-  INTERVIEW_EDIT: 'INTERVIEW_EDIT',
-  INTERVIEW_DELETE: 'INTERVIEW_DELETE',
-  
   JOB_VIEW: 'JOB_VIEW',
-  JOB_CREATE: 'JOB_CREATE',
   JOB_EDIT: 'JOB_EDIT',
   JOB_DELETE: 'JOB_DELETE',
+  JOB_POST: 'JOB_POST',
   
-  ONBOARDING_VIEW: 'ONBOARDING_VIEW',
-  ONBOARDING_CREATE: 'ONBOARDING_CREATE',
-  ONBOARDING_EDIT: 'ONBOARDING_EDIT',
-  ONBOARDING_DELETE: 'ONBOARDING_DELETE',
-  
-  // Employee Management
-  EMPLOYEE_VIEW: 'EMPLOYEE_VIEW',
-  EMPLOYEE_CREATE: 'EMPLOYEE_CREATE',
-  EMPLOYEE_EDIT: 'EMPLOYEE_EDIT',
-  EMPLOYEE_DELETE: 'EMPLOYEE_DELETE',
-  
-  DEPARTMENT_VIEW: 'DEPARTMENT_VIEW',
-  DEPARTMENT_CREATE: 'DEPARTMENT_CREATE',
-  DEPARTMENT_EDIT: 'DEPARTMENT_EDIT',
-  DEPARTMENT_DELETE: 'DEPARTMENT_DELETE',
-  
-  LEAVE_VIEW: 'LEAVE_VIEW',
-  LEAVE_CREATE: 'LEAVE_CREATE',
-  LEAVE_EDIT: 'LEAVE_EDIT',
-  LEAVE_DELETE: 'LEAVE_DELETE',
-  
-  ATTENDENCE_VIEW: 'ATTENDENCE_VIEW',
-  ATTENDENCE_CREATE: 'ATTENDENCE_CREATE',
-  ATTENDENCE_EDIT: 'ATTENDENCE_EDIT',
-  ATTENDENCE_DELETE: 'ATTENDENCE_DELETE',
-  
-  PERFORMANCE_VIEW: 'PERFORMANCE_VIEW',
-  PERFORMANCE_CREATE: 'PERFORMANCE_CREATE',
-  PERFORMANCE_EDIT: 'PERFORMANCE_EDIT',
-  PERFORMANCE_DELETE: 'PERFORMANCE_DELETE',
+ 
   
   // Settings
-  COMPANYPROFILE_VIEW: 'COMPANYPROFILE_VIEW',
-  COMPANYPROFILE_CREATE: 'COMPANYPROFILE_CREATE',
-  COMPANYPROFILE_EDIT: 'COMPANYPROFILE_EDIT',
-  COMPANYPROFILE_DELETE: 'COMPANYPROFILE_DELETE',
+  USER_VIEW: 'USER_VIEW',
+  USER_CREATE: 'USER_CREATE',
+  USER_EDIT: 'USER_EDIT',
+  USER_DELETE: 'USER_DELETE',
   
-  ROLESPERMISIONS_VIEW: 'ROLESPERMISIONS_VIEW',
-  ROLESPERMISIONS_CREATE: 'ROLESPERMISIONS_CREATE',
-  ROLESPERMISIONS_EDIT: 'ROLESPERMISIONS_EDIT',
-  ROLESPERMISIONS_DELETE: 'ROLESPERMISIONS_DELETE',
+  ROLE_MANAGE: 'ROLE_MANAGE',
   
-  SYSTEMSETTINGS_VIEW: 'SYSTEMSETTINGS_VIEW',
-  SYSTEMSETTINGS_CREATE: 'SYSTEMSETTINGS_CREATE',
-  SYSTEMSETTINGS_EDIT: 'SYSTEMSETTINGS_EDIT',
-  SYSTEMSETTINGS_DELETE: 'SYSTEMSETTINGS_DELETE',
+ 
   
-  ROLESDETAILS_VIEW: 'ROLESDETAILS_VIEW',
-  ROLESDETAILS_EDIT: 'ROLESDETAILS_EDIT',
+  // System
+  SYSTEM_ADMIN: 'SYSTEM_ADMIN',
 } as const;
 
 // Module-based permission structure
 export const MODULE_PERMISSIONS = {
-  dashboard: {
-    dashboard: {
-      view: 'DASHBOARD_VIEW'
-    }
+  employee_management: {
+    employees: {
+      view: PERMISSIONS.EMPLOYEES_VIEW,
+      create: PERMISSIONS.EMPLOYEES_CREATE,
+      edit: PERMISSIONS.EMPLOYEES_EDIT,
+      delete: PERMISSIONS.EMPLOYEES_DELETE,
+    },
+    department: {
+      manage: PERMISSIONS.DEPARTMENT_MANAGE,
+    },
   },
   hiring: {
     candidate: {
@@ -124,95 +101,39 @@ export const MODULE_PERMISSIONS = {
       edit: PERMISSIONS.CANDIDATE_EDIT,
       delete: PERMISSIONS.CANDIDATE_DELETE,
     },
-    interview: {
-      view: PERMISSIONS.INTERVIEW_VIEW,
-      create: PERMISSIONS.INTERVIEW_CREATE,
-      edit: PERMISSIONS.INTERVIEW_EDIT,
-      delete: PERMISSIONS.INTERVIEW_DELETE,
-    },
     job: {
       view: PERMISSIONS.JOB_VIEW,
-      create: PERMISSIONS.JOB_CREATE,
       edit: PERMISSIONS.JOB_EDIT,
       delete: PERMISSIONS.JOB_DELETE,
-    },
-    onboarding: {
-      view: PERMISSIONS.ONBOARDING_VIEW,
-      create: PERMISSIONS.ONBOARDING_CREATE,
-      edit: PERMISSIONS.ONBOARDING_EDIT,
-      delete: PERMISSIONS.ONBOARDING_DELETE,
-    },
-  },
-  employeemanagement: {
-    employee: {
-      view: PERMISSIONS.EMPLOYEE_VIEW,
-      create: PERMISSIONS.EMPLOYEE_CREATE,
-      edit: PERMISSIONS.EMPLOYEE_EDIT,
-      delete: PERMISSIONS.EMPLOYEE_DELETE,
-    },
-    department: {
-      view: PERMISSIONS.DEPARTMENT_VIEW,
-      create: PERMISSIONS.DEPARTMENT_CREATE,
-      edit: PERMISSIONS.DEPARTMENT_EDIT,
-      delete: PERMISSIONS.DEPARTMENT_DELETE,
-    },
-    leave: {
-      view: PERMISSIONS.LEAVE_VIEW,
-      create: PERMISSIONS.LEAVE_CREATE,
-      edit: PERMISSIONS.LEAVE_EDIT,
-      delete: PERMISSIONS.LEAVE_DELETE,
-    },
-    attendence: {
-      view: PERMISSIONS.ATTENDENCE_VIEW,
-      create: PERMISSIONS.ATTENDENCE_CREATE,
-      edit: PERMISSIONS.ATTENDENCE_EDIT,
-      delete: PERMISSIONS.ATTENDENCE_DELETE,
-    },
-    performance: {
-      view: PERMISSIONS.PERFORMANCE_VIEW,
-      create: PERMISSIONS.PERFORMANCE_CREATE,
-      edit: PERMISSIONS.PERFORMANCE_EDIT,
-      delete: PERMISSIONS.PERFORMANCE_DELETE,
+      post: PERMISSIONS.JOB_POST,
     },
   },
   settings: {
-    companyprofile: {
-      view: PERMISSIONS.COMPANYPROFILE_VIEW,
-      create: PERMISSIONS.COMPANYPROFILE_CREATE,
-      edit: PERMISSIONS.COMPANYPROFILE_EDIT,
-      delete: PERMISSIONS.COMPANYPROFILE_DELETE,
+    user: {
+      view: PERMISSIONS.USER_VIEW,
+      create: PERMISSIONS.USER_CREATE,
+      edit: PERMISSIONS.USER_EDIT,
+      delete: PERMISSIONS.USER_DELETE,
     },
-    rolespermisions: {
-      view: PERMISSIONS.ROLESPERMISIONS_VIEW,
-      create: PERMISSIONS.ROLESPERMISIONS_CREATE,
-      edit: PERMISSIONS.ROLESPERMISIONS_EDIT,
-      delete: PERMISSIONS.ROLESPERMISIONS_DELETE,
+    role: {
+      manage: PERMISSIONS.ROLE_MANAGE,
     },
-    systemsettings: {
-      view: PERMISSIONS.SYSTEMSETTINGS_VIEW,
-      create: PERMISSIONS.SYSTEMSETTINGS_CREATE,
-      edit: PERMISSIONS.SYSTEMSETTINGS_EDIT,
-      delete: PERMISSIONS.SYSTEMSETTINGS_DELETE,
-    },
-    rolesDetails: {
-      view: PERMISSIONS.ROLESDETAILS_VIEW,
-      edit: PERMISSIONS.ROLESDETAILS_EDIT,
+  },
+  system: {
+    system: {
+      admin: PERMISSIONS.SYSTEM_ADMIN,
     },
   },
 } as const;
 
 // Update ROLE_PERMISSIONS to include EMPLOYEE with correct permissions
 export let ROLE_PERMISSIONS = {
-  ADMIN: Object.values(PERMISSIONS),
+  SUPER_ADMIN: Object.values(PERMISSIONS),
   EMPLOYEE: [
-    PERMISSIONS.EMPLOYEE_VIEW,
-    PERMISSIONS.DEPARTMENT_VIEW,
-    PERMISSIONS.LEAVE_VIEW,
-    PERMISSIONS.LEAVE_CREATE,
-    PERMISSIONS.ATTENDENCE_VIEW,
-    PERMISSIONS.PERFORMANCE_VIEW,
+    PERMISSIONS.EMPLOYEES_VIEW,
+    PERMISSIONS.DEPARTMENT_MANAGE,
     PERMISSIONS.JOB_VIEW,
-    PERMISSIONS.COMPANYPROFILE_VIEW,
+    PERMISSIONS.USER_VIEW,
   ],
 } as const;
 
@@ -224,7 +145,7 @@ export type CustomRole = {
 
 // Update the AUTH_ROLE_PERMISSIONS type to be mutable
 export const AUTH_ROLE_PERMISSIONS: Record<string, string[]> = {
-  ADMIN: [...Object.values(PERMISSIONS)],
+  SUPER_ADMIN: [...Object.values(PERMISSIONS)],
   EMPLOYEE: [...ROLE_PERMISSIONS.EMPLOYEE],
 };
 
@@ -267,22 +188,59 @@ const STORAGE_KEYS = {
   USER_ROLES: 'crm_user_roles'
 };
 
-// Helper function to convert permissions object to array
-const permissionsObjectToArray = (permissions: Record<string, any> | string[] | undefined): string[] => {
-  if (!permissions) return [];
-  if (Array.isArray(permissions)) return permissions;
-  if (typeof permissions === 'object') {
-    return Object.keys(permissions).filter(key => permissions[key] === true);
-  }
-  return [];
-};
-
 // Helper function to convert permissions array to object
 const permissionsArrayToObject = (permissions: string[]): Record<string, any> => {
   return permissions.reduce((acc, permission) => {
     acc[permission] = true;
     return acc;
   }, {} as Record<string, any>);
+};
+
+// Helper function to transform permissions for backend
+const transformPermissionsForBackend = (permissions: UserPermissions): Record<string, any> => {
+  const simplified: Record<string, any> = {};
+  
+  // Transform employee management permissions
+  if (permissions.employee_management) {
+    simplified.employee_management = {};
+    Object.entries(permissions.employee_management).forEach(([submodule, actions]) => {
+      if (actions && typeof actions === 'object') {
+        simplified.employee_management[submodule] = actions;
+      }
+    });
+  }
+  
+  // Transform hiring permissions
+  if (permissions.hiring) {
+    simplified.hiring = {};
+    Object.entries(permissions.hiring).forEach(([submodule, actions]) => {
+      if (actions && typeof actions === 'object') {
+        simplified.hiring[submodule] = actions;
+      }
+    });
+  }
+  
+  // Transform settings permissions
+  if (permissions.settings) {
+    simplified.settings = {};
+    Object.entries(permissions.settings).forEach(([submodule, actions]) => {
+      if (actions && typeof actions === 'object') {
+        simplified.settings[submodule] = actions;
+      }
+    });
+  }
+  
+  // Transform system permissions
+  if (permissions.system) {
+    simplified.system = {};
+    Object.entries(permissions.system).forEach(([submodule, actions]) => {
+      if (actions && typeof actions === 'object') {
+        simplified.system[submodule] = actions;
+      }
+    });
+  }
+  
+  return simplified;
 };
 
 const saveToStorage = (key: string, value: any) => {
@@ -303,12 +261,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Simulate checking for a logged-in user on component mount
+    // Check for a logged-in user and validate session on component mount
+    const initializeAuth = async () => {
     const storedUser = localStorage.getItem('currentUser');
     if (storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser);
-        // Ensure permissions is a valid object
+          
+          // Validate current session (check tokens and refresh if needed)
+          const isValidSession = await authService.validateSession();
+          
+          if (isValidSession) {
+            // Session is valid, set user
         const userWithPermissions = {
           ...parsedUser,
           permissions: typeof parsedUser.permissions === 'object' && parsedUser.permissions !== null 
@@ -317,12 +281,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
         setUser(userWithPermissions);
         setIsAuthenticated(true);
+            console.log('Session validated successfully');
+          } else {
+            // Session is invalid, clear stored data
+            console.log('Session validation failed, clearing stored data');
+            localStorage.removeItem('currentUser');
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            setUser(null);
+            setIsAuthenticated(false);
+            
+            toast({
+              title: "🔒 Session Expired",
+              description: "Your session has expired. Please log in again.",
+              variant: "destructive",
+              duration: 5000,
+              className: "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200 text-black",
+            });
+          }
       } catch (error) {
-        console.error('Error parsing stored user:', error);
+          console.error('Error during session initialization:', error);
         // Clear invalid data
         localStorage.removeItem('currentUser');
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          setUser(null);
+          setIsAuthenticated(false);
       }
     }
+    };
+    
+    initializeAuth();
   }, []);
 
   // Fetch roles from backend on mount
@@ -330,36 +319,76 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const fetchRoles = async () => {
       if (isAuthenticated) {
         try {
+          console.log('Fetching roles from backend...');
           const res = await roleService.getRoles();
-          console.log('Fetched roles from backend:', res);
+          console.log('Raw roles response from backend:', res);
+          console.log('Response structure:', {
+            hasData: !!res.data,
+            hasDataData: !!res.data?.data,
+            dataType: typeof res.data,
+            dataDataType: typeof res.data?.data
+          });
           
-          const rolesArray = res.data.data || [];
-          const rolesWithIds = rolesArray.map((role: Role) => ({
+          const rolesArray = res.data?.data || res.data || [];
+          console.log('Roles array extracted:', rolesArray);
+          console.log('Roles array length:', rolesArray.length);
+          console.log('First role sample:', rolesArray[0]);
+          
+          const rolesWithIds = rolesArray.map((role: Role, index: number) => {
+            // console.log(`Processing role ${index + 1}:`, role.name);
+            // console.log(`Role ${index + 1} permissions:`, role.permissions);
+            // console.log(`Role ${index + 1} permissions type:`, typeof role.permissions);
+            // console.log(`Role ${index + 1} permissions keys:`, role.permissions ? Object.keys(role.permissions) : 'null');
+            
+            return {
             ...role,
             id: role.id || role._id,
             _id: role._id || role.id,
             permissions: role.permissions || {} // Keep permissions as an object
-          }));
+            };
+          });
           
           console.log('Processed roles with IDs:', rolesWithIds);
           setRoles(rolesWithIds);
-        } catch (err) {
+          
+          if (rolesWithIds.length === 0) {
+            console.warn('No roles found in the response');
+          }
+        } catch (err: any) {
           console.error('Error fetching roles:', err);
-          // handle error, maybe show toast
+          console.error('Error details:', {
+            message: err.message,
+            status: err.response?.status,
+            data: err.response?.data
+          });
+          
+          // Show error toast
+          toast({
+            title: "⚠️ Roles Fetch Failed",
+            description: "Failed to fetch roles from the server. Please refresh the page.",
+            variant: "destructive",
+            duration: 5000,
+            className: "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200 text-black",
+          });
         }
+      } else {
+        console.log('User not authenticated, skipping roles fetch');
       }
     };
     fetchRoles();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, toast]);
 
   // Function to refresh roles from backend
   const refreshRoles = async () => {
     if (isAuthenticated) {
       try {
+        console.log('Refreshing roles from backend...');
         const res = await roleService.getRoles();
-        console.log('Refreshed roles from backend:', res);
+        console.log('Raw refreshed roles response:', res);
         
-        const rolesArray = res.data.data || [];
+        const rolesArray = res.data?.data || res.data || [];
+        console.log('Refreshed roles array extracted:', rolesArray);
+        
         const rolesWithIds = rolesArray.map((role: Role) => ({
           ...role,
           id: role.id || role._id,
@@ -368,10 +397,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }));
         
         console.log('Processed refreshed roles with IDs:', rolesWithIds);
-        setRoles(rolesWithIds);
-      } catch (err) {
+        
+        // Check if roles have permissions, if not fetch them separately
+        const rolesWithPermissions = await Promise.all(
+          rolesWithIds.map(async (role) => {
+            if (!role.permissions || Object.keys(role.permissions).length === 0) {
+              console.log(`Role ${role.name} has no permissions, fetching separately...`);
+              try {
+                const permissions = await roleService.getRolePermissions(role.id || role._id);
+                console.log(`Fetched permissions for ${role.name}:`, permissions);
+                return {
+                  ...role,
+                  permissions: permissions || {}
+                };
+              } catch (permError) {
+                console.error(`Failed to fetch permissions for role ${role.name}:`, permError);
+                return role;
+              }
+            }
+            return role;
+          })
+        );
+        
+        console.log('Final roles with permissions:', rolesWithPermissions);
+        setRoles(rolesWithPermissions);
+        
+        if (rolesWithPermissions.length === 0) {
+          console.warn('No roles found in the refreshed response');
+        }
+      } catch (err: any) {
         console.error('Error refreshing roles:', err);
+        console.error('Refresh error details:', {
+          message: err.message,
+          status: err.response?.status,
+          data: err.response?.data
+        });
+        
+        toast({
+          title: "⚠️ Roles Refresh Failed",
+          description: "Failed to refresh roles from the server.",
+          variant: "destructive",
+          duration: 5000,
+          className: "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200 text-black",
+        });
       }
+    } else {
+      console.log('User not authenticated, skipping roles refresh');
     }
   };
 
@@ -381,21 +452,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
 
-    if (user.role.toLowerCase() === 'administrator' || user.role.toLowerCase() === 'admin') {
+    // Super Admin role has full access to everything (system role)
+    if (user.role.toLowerCase() === 'super_admin' || user.role.toLowerCase() === 'super admin') {
       return true;
     }
     
-    const [module, action] = permission.toLowerCase().split('_');
-    if (!module || !action) return false;
-
-    const [mainModule, subModule] = module.split('.');
+    // Handle different permission formats
+    const parts = permission.toLowerCase().split('_');
     
-    if(user.permissions){
-      if (mainModule && subModule) {
-        return Boolean((user.permissions as any)?.[mainModule]?.[subModule]?.[action]);
+    if (parts.length >= 2) {
+      const [module, action] = parts;
+      
+      // Check if it's a module-level permission (e.g., "hiring_view")
+      if (user.permissions && (user.permissions as any)[module]) {
+        const modulePermissions = (user.permissions as any)[module];
+        
+        // Check if any submodule has the required action
+        return Object.values(modulePermissions).some((submodule: any) => {
+          return submodule[action] === true;
+        });
       }
-      return Boolean((user.permissions as any)?.[module]?.[action]);
     }
+    
+    // Handle dot notation (e.g., "hiring.candidate.view")
+    const [module, subModule, action] = permission.toLowerCase().split('.');
+    
+    if (module && subModule && action && user.permissions) {
+      return Boolean((user.permissions as any)?.[module]?.[subModule]?.[action]);
+    }
+    
     return false;
   };
 
@@ -405,7 +490,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
 
-    if (user.role.toLowerCase() === 'administrator' || user.role.toLowerCase() === 'admin') {
+    // Super Admin role has full access to everything (system role)
+    if (user.role.toLowerCase() === 'super_admin' || user.role.toLowerCase() === 'super admin') {
       return true;
     }
 
@@ -423,16 +509,98 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     try {
       const response = await authService.login({ email, password });
-      const userData = response.data.user;
       
-      // Create user object
+      // Handle different response structures
+      let userData;
+      if (response.user) {
+        userData = response.user;
+      } else {
+        throw new Error('Invalid response structure from server');
+      }
+
+      // If Super Admin, create a virtual user object with all permissions
+      const isSuperAdmin =
+        (Array.isArray(userData.roles) && userData.roles.some((r: string) => ['SUPER_ADMIN', 'Super Admin', 'super_admin'].includes(r))) ||
+        (typeof userData.roles === 'string' && ['SUPER_ADMIN', 'Super Admin', 'super_admin'].includes(userData.roles));
+
+      if (isSuperAdmin) {
+        // Grant all permissions for all modules
+        const allPermissionsObject = {
+          employee_management: {
+            employees: { view: true, create: true, edit: true, delete: true },
+            department: { manage: true }
+          },
+          hiring: {
+            candidate: { view: true, create: true, edit: true, delete: true },
+            job: { view: true, edit: true, delete: true, post: true }
+          },
+          settings: {
+            user: { view: true, create: true, edit: true, delete: true },
+            role: { manage: true }
+          },
+          system: {
+            system: { admin: true }
+          }
+        };
+        const superAdminUser = {
+          id: userData._id || 'super_admin',
+          email: userData.email || 'superadmin@system.local',
+          firstName: userData.firstName || 'Super',
+          lastName: userData.lastName || 'Admin',
+          role: 'Super Admin',
+          permissions: allPermissionsObject,
+        };
+        setUser(superAdminUser);
+        setIsAuthenticated(true);
+        localStorage.setItem('currentUser', JSON.stringify(superAdminUser));
+        toast({
+          title: "🎉 Welcome Super Admin!",
+          description: `Hello Super Admin! You have full system access.`,
+          duration: 4000,
+          className: "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 text-black",
+        });
+        return;
+      }
+      
+      // Fetch permissions from separate API endpoint
+      console.log('Fetching permissions from separate API...');
+      let permissionsData;
+      try {
+        permissionsData = await permissionService.getUserPermissions();
+        console.log('Permissions fetched successfully:', permissionsData);
+      } catch (permissionsError) {
+        console.error('Failed to fetch permissions, using default permissions:', permissionsError);
+        // Use default permissions if the permissions API fails
+        permissionsData = {
+          permissions: {
+            employee_management: {
+              employees: { view: false, create: false, edit: false, delete: false },
+              department: { manage: false }
+            },
+            hiring: {
+              candidate: { view: false, create: false, edit: false, delete: false },
+              job: { view: false, edit: false, delete: false, post: false }
+            },
+            settings: {
+              user: { view: false, create: false, edit: false, delete: false },
+              role: { manage: false }
+            },
+            system: {
+              system: { admin: false }
+            }
+          } as UserPermissions,
+          roles: userData.roles || []
+        };
+      }
+      
+      // Create user object with fetched permissions
       const userObject = {
         id: userData._id,
         email: userData.email,
         firstName: userData.firstName,
         lastName: userData.lastName,
-        role: userData.role,
-        permissions: userData.permissions,
+        role: permissionsData.roles && permissionsData.roles.length > 0 ? permissionsData.roles[0] : 'User', // Use roles from permissions API
+        permissions: permissionsData.permissions, // Use permissions from separate API
       };
       
       // Set user data and authentication state
@@ -448,11 +616,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         duration: 4000,
         className: "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 text-black",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
+      
+      // Handle different types of errors
+      let errorMessage = "Please check your email and password and try again.";
+      
+      if (error.code === 'ERR_NETWORK') {
+        errorMessage = "Network error. Please check your internet connection and try again.";
+      } else if (error.response?.status === 401) {
+        errorMessage = "Invalid email or password. Please try again.";
+      } else if (error.response?.status === 500) {
+        errorMessage = "Server error. Please try again later.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "❌ Login Failed",
-        description: "Please check your email and password and try again.",
+        description: errorMessage,
         variant: "destructive",
         duration: 5000,
         className: "bg-gradient-to-r from-red-50 to-rose-50 border-red-200 text-black",
@@ -558,24 +740,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!prevUser) return null;
       // Ensure permissions is always a UserPermissions object
       const safePermissions = permissions || {
+        employee_management: {
+          employees: { view: false, create: false, edit: false, delete: false },
+          department: { manage: false }
+        },
         hiring: {
           candidate: { view: false, create: false, edit: false, delete: false },
-          interview: { view: false, create: false, edit: false, delete: false },
-          job: { view: false, create: false, edit: false, delete: false },
-          onboarding: { view: false, create: false, edit: false, delete: false }
-        },
-        employeemanagement: {
-          employee: { view: false, create: false, edit: false, delete: false },
-          department: { view: false, create: false, edit: false, delete: false },
-          leave: { view: false, create: false, edit: false, delete: false },
-          attendence: { view: false, create: false, edit: false, delete: false },
-          performance: { view: false, create: false, edit: false, delete: false }
+          job: { view: false, edit: false, delete: false, post: false }
         },
         settings: {
-          companyprofile: { view: false, create: false, edit: false, delete: false },
-          rolespermisions: { view: false, create: false, edit: false, delete: false },
-          systemsettings: { view: false, create: false, edit: false, delete: false },
-          rolesDetails: { view: false, edit: false }
+          user: { view: false, create: false, edit: false, delete: false },
+          role: { manage: false }
+        },
+        system: {
+          system: { admin: false }
         }
       };
       const updatedUser = {
@@ -591,22 +769,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Create role using backend
   const createRole = async (role: Partial<Role>) => {
     try {
-      // Convert permissions array to the format expected by the backend
+      // Transform permissions to the format expected by the backend
       const roleData = {
         ...role,
-        permissions: Array.isArray(role.permissions) 
-          ? permissionsArrayToObject(role.permissions)
-          : role.permissions
+        permissions: transformPermissionsForBackend(role.permissions as UserPermissions)
       };
       
       const newRole = await roleService.createRole(roleData);
-      console.log('Created new role:', newRole);
-      console.log('Original role name:', role.name);
-      console.log('Backend returned role name:', newRole.name);
       
       // Use the original role name if backend doesn't return it
       const finalRoleName = newRole.name || role.name;
-      console.log('Final role name for toast:', finalRoleName);
       
       // Refresh roles from backend to ensure consistency
       await refreshRoles();
@@ -627,24 +799,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         className: "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 text-black",
       });
     } catch (err: any) {
-      console.error('Failed to create role:', err);
+      console.error('❌ Failed to create role:', err);
+      console.error('❌ Error response status:', err?.response?.status);
+      console.error('❌ Error response data:', err?.response?.data);
+      
+      let errorMessage = "Failed to create role. Please try again.";
       if (err?.response?.data?.message) {
-        toast({
-          title: "🚫 Role Creation Failed",
-          description: err.response.data.message,
-          variant: "destructive",
-          duration: 5000,
-          className: "bg-gradient-to-r from-red-50 to-rose-50 border-red-200 text-black",
-        });
-      } else {
-        toast({
-          title: "🚫 Role Creation Failed",
-          description: "Failed to create role. Please try again.",
-          variant: "destructive",
-          duration: 5000,
-          className: "bg-gradient-to-r from-red-50 to-rose-50 border-red-200 text-black",
-        });
+        errorMessage = err.response.data.message;
+      } else if (err?.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      } else if (err.message) {
+        errorMessage = err.message;
       }
+      
+        toast({
+          title: "🚫 Role Creation Failed",
+        description: errorMessage,
+          variant: "destructive",
+          duration: 5000,
+          className: "bg-gradient-to-r from-red-50 to-rose-50 border-red-200 text-black",
+        });
       // Re-throw the error so the calling component can handle it
       throw err;
     }
@@ -653,11 +827,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Update role using backend
   const updateRole = useCallback(async (roleName: string, permissions: UserPermissions) => {
     try {
-      const role = roles.find(r => r.name === roleName);
+      console.log('=== UPDATING ROLE ===');
+      console.log('Role name to update:', roleName);
+      console.log('Current roles in state:', roles);
+      console.log('Permissions to update:', JSON.stringify(permissions, null, 2));
+      
+      // Prevent editing of system roles
+      const systemRoles = ['SUPER_ADMIN', 'Super Admin', 'super_admin'];
+      if (systemRoles.includes(roleName) || systemRoles.some(role => role.toLowerCase() === roleName.toLowerCase())) {
+        toast({
+          title: "🛡️ System Role Protected",
+          description: `Cannot edit system role "${roleName}". System roles are protected.`,
+          variant: "destructive",
+          duration: 5000,
+          className: "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200 text-black",
+        });
+        return;
+      }
+
+      let role = roles.find(r => r.name === roleName);
+      console.log('Found role in current state:', role);
+      
+      // If role not found, try refreshing roles from backend
       if (!role) {
+        console.log('Role not found in current state, refreshing roles from backend...');
+        try {
+          // Trigger a refresh by dispatching the event
+          window.dispatchEvent(new CustomEvent('refreshRoles'));
+          // Wait a bit for the refresh to complete
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Try to find the role again in the updated roles state
+          const currentRoles = roles; // This will be the updated roles after refresh
+          role = currentRoles.find(r => r.name === roleName);
+          console.log('Found role after refresh:', role);
+        } catch (refreshError) {
+          console.error('Error refreshing roles:', refreshError);
+        }
+      }
+      
+      if (!role) {
+        console.error('Role still not found after refresh. Available roles:', roles.map(r => ({ name: r.name, id: r.id || r._id })));
         toast({
           title: "🔍 Role Not Found",
-          description: "The specified role could not be found in the system.",
+          description: `The role "${roleName}" could not be found in the system. Please refresh the page and try again.`,
           variant: "destructive",
           duration: 5000,
           className: "bg-gradient-to-r from-red-50 to-rose-50 border-red-200 text-black",
@@ -667,8 +880,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Use _id as fallback if id is not available
       const roleId = role.id || role._id;
+      console.log('Role ID to update:', roleId);
+      console.log('Full role object:', role);
+      
       if (!roleId) {
-        console.error('Role object:', role);
+        console.error('Role object missing ID:', role);
         toast({
           title: "🔧 Role ID Missing",
           description: "Role ID not found. Please refresh the page and try again.",
@@ -679,12 +895,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       
+      // Validate role ID format
+      if (typeof roleId !== 'string' || roleId.length < 10) {
+        console.error('Invalid role ID format:', roleId);
+        toast({
+          title: "🔧 Invalid Role ID",
+          description: "Role ID format is invalid. Please refresh the page and try again.",
+          variant: "destructive",
+          duration: 5000,
+          className: "bg-gradient-to-r from-red-50 to-rose-50 border-red-200 text-black",
+        });
+        return;
+      }
+      
       const permissionsObject = permissions;
       
-      const updatedRole = await roleService.updateRole(roleId, { permissions: permissionsObject });
+      console.log('Updating role with ID:', roleId);
+      console.log('Role name:', roleName);
+      console.log('Original permissions:', JSON.stringify(permissionsObject, null, 2));
+      
+      // Transform permissions to a simpler format that backend might expect
+      const simplifiedPermissions = transformPermissionsForBackend(permissionsObject);
+      console.log('Simplified permissions for backend:', JSON.stringify(simplifiedPermissions, null, 2));
+      
+      console.log('Calling roleService.updateRole with:', { roleId, permissions: simplifiedPermissions });
+      const updatedRole = await roleService.updateRole(roleId, { permissions: simplifiedPermissions });
+      console.log('Backend response:', updatedRole);
       
       // Refresh roles from backend to ensure consistency
-      await refreshRoles();
+      console.log('Refreshing roles from backend after update...');
+      window.dispatchEvent(new CustomEvent('refreshRoles'));
       
       window.dispatchEvent(new CustomEvent('permissionsUpdated', {
         detail: { roleName: updatedRole.name, permissions: updatedRole.permissions }
@@ -698,12 +938,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
     } catch (err: any) {
       console.error('Failed to update role:', err);
+      console.error('Error response data:', err?.response?.data);
+      console.error('Error response status:', err?.response?.status);
+      console.error('Error response headers:', err?.response?.headers);
       
       let errorMessage = "Failed to update role. Please try again.";
-      if (err.message) {
-        errorMessage = err.message;
-      } else if (err?.response?.data?.message) {
+      if (err?.response?.data?.message) {
         errorMessage = err.response.data.message;
+      } else if (err?.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      } else if (err.message) {
+        errorMessage = err.message;
       }
       
       toast({
@@ -723,8 +968,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const deleteRole = async (roleName: string) => {
     try {
       // Prevent deletion of system roles
-      const systemRoles = ['ADMIN'];
-      if (systemRoles.includes(roleName.toUpperCase())) {
+      const systemRoles = ['SUPER_ADMIN', 'Super Admin', 'super_admin'];
+      if (systemRoles.includes(roleName) || systemRoles.some(role => role.toLowerCase() === roleName.toLowerCase())) {
         toast({
           title: "🛡️ System Role Protected",
           description: `Cannot delete system role "${roleName}". System roles are protected.`,
@@ -809,6 +1054,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Update the assignRoleToUser function to handle permissions
   const assignRoleToUser = (userId: string, roleName: string) => {
+    // Prevent assigning Super Admin role to users (it's a system role)
+    const systemRoles = ['SUPER_ADMIN', 'Super Admin', 'super_admin'];
+    if (systemRoles.includes(roleName) || systemRoles.some(role => role.toLowerCase() === roleName.toLowerCase())) {
+      toast({
+        title: "🛡️ System Role Protected",
+        description: `Cannot assign system role "${roleName}" to users. System roles are protected.`,
+        variant: "destructive",
+        duration: 5000,
+        className: "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200 text-black",
+      });
+      return;
+    }
+
     setUserRoles(prev => {
       const updated = { ...prev, [userId]: roleName };
       saveToStorage(STORAGE_KEYS.USER_ROLES, updated);
@@ -825,19 +1083,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         )
       );
 
-      // If the current user's role is being updated, update their permissions too
+      // If the current user's role is being updated, refresh their permissions from API
       if (user?.id === userId) {
-        setUser(prevUser => {
-          if (!prevUser) return null;
-          const updatedUser = {
-            ...prevUser,
-            role: roleName,
-            permissions: permissionsObject as UserPermissions
-          };
-          // Update localStorage to persist the changes
-          localStorage.setItem('currentUser', JSON.stringify(updatedUser));
-          return updatedUser;
-        });
+        // Refresh permissions from API for current user
+        refreshUserPermissions();
       }
       
       // Force a re-render of components that depend on permissions
@@ -868,19 +1117,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         )
       );
 
-      // If the current user's role is being updated, update their permissions too
+      // If the current user's role is being updated, refresh their permissions from API
       if (user?.id === userId) {
-        setUser(prevUser => {
-          if (!prevUser) return null;
-          const updatedUser = {
-            ...prevUser,
-            role: 'Employee',
-            permissions: defaultPermissionsObject as UserPermissions
-          };
-          // Update localStorage to persist the changes
-          localStorage.setItem('currentUser', JSON.stringify(updatedUser));
-          return updatedUser;
-        });
+        // Refresh permissions from API for current user
+        refreshUserPermissions();
       }
       
       // Force a re-render of components that depend on permissions
@@ -892,27 +1132,78 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   };
  
-  // Add an effect to handle permission updates
+  // Listen for custom events
   useEffect(() => {
+    const handleRolesUpdated = (event: CustomEvent) => {
+      console.log('Roles updated event received:', event.detail);
+      // Refresh roles when a role is created/updated
+      refreshRoles();
+    };
+
     const handlePermissionsUpdated = (event: CustomEvent) => {
-      const { roleName, permissions } = event.detail;
-      // Update any components that need to react to permission changes
-      if (user?.role === roleName) {
-        setUser(prevUser => {
-          if (!prevUser) return null;
-          return {
-            ...prevUser,
-            permissions: permissions
-          };
-        });
+      console.log('Permissions updated event received:', event.detail);
+      // Refresh user permissions when permissions change
+      refreshUserPermissions();
+    };
+
+    const handleRefreshRoles = () => {
+      console.log('Refresh roles event received');
+      refreshRoles();
+    };
+
+    const handleUpdateRoles = (event: CustomEvent) => {
+      console.log('Update roles event received:', event.detail);
+      if (event.detail?.roles) {
+        console.log('Updating roles with new data:', event.detail.roles);
+        setRoles(event.detail.roles);
       }
     };
 
+    window.addEventListener('rolesUpdated', handleRolesUpdated as EventListener);
     window.addEventListener('permissionsUpdated', handlePermissionsUpdated as EventListener);
+    window.addEventListener('refreshRoles', handleRefreshRoles as EventListener);
+    window.addEventListener('updateRoles', handleUpdateRoles as EventListener);
+
     return () => {
+      window.removeEventListener('rolesUpdated', handleRolesUpdated as EventListener);
       window.removeEventListener('permissionsUpdated', handlePermissionsUpdated as EventListener);
+      window.removeEventListener('refreshRoles', handleRefreshRoles as EventListener);
+      window.removeEventListener('updateRoles', handleUpdateRoles as EventListener);
     };
-  }, [user]);
+  }, []);
+
+  const refreshUserPermissions = async () => {
+    if (!isAuthenticated || !user) {
+      console.log('User not authenticated, skipping permissions refresh');
+      return;
+    }
+
+    try {
+      console.log('Refreshing user permissions...');
+      const permissionsData = await permissionService.getUserPermissions();
+      
+      // Update user with new permissions and roles
+      const updatedUser = {
+        ...user,
+        role: permissionsData.roles && permissionsData.roles.length > 0 ? permissionsData.roles[0] : user.role,
+        permissions: permissionsData.permissions || user.permissions,
+      };
+      
+      setUser(updatedUser);
+      localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      
+      console.log('User permissions refreshed successfully');
+    } catch (error: any) {
+      console.error('Failed to refresh user permissions:', error);
+      toast({
+        title: "⚠️ Permissions Update Failed",
+        description: "Failed to refresh your permissions. Some features may not work correctly.",
+        variant: "destructive",
+        duration: 5000,
+        className: "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200 text-black",
+      });
+    }
+  };
 
   const value = {
     isAuthenticated,
@@ -924,6 +1215,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     hasModulePermission,
     updateUserRole,
     updateUserPermissions,
+    refreshUserPermissions,
+    refreshRoles,
     users,
     roles,
     userRoles,
