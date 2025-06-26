@@ -4,8 +4,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { format } from "date-fns";
+import { format, isValid, parseISO } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { 
+  User, 
+  Mail, 
+  Phone, 
+  MapPin, 
+  Building2, 
+  Calendar, 
+  IndianRupee, 
+  CreditCard,
+  Users,
+  Clock
+} from "lucide-react";
 
 interface ViewEmployeeDialogProps {
   employee: any;
@@ -16,84 +28,253 @@ interface ViewEmployeeDialogProps {
 export function ViewEmployeeDialog({ employee, open, onOpenChange }: ViewEmployeeDialogProps) {
   if (!employee) return null;
 
-  const DetailRow = ({ label, value }: { label: string; value: any }) => (
-    <div className="grid grid-cols-3 gap-4 py-3 border-b last:border-0">
-      <dt className="font-medium text-gray-500">{label}</dt>
-      <dd className="col-span-2">{value}</dd>
-    </div>
-  );
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Employee Details</DialogTitle>
-        </DialogHeader>
-        <div className="mt-4 space-y-6">
-          {/* Personal Information */}
-          <div>
-            <h3 className="text-lg font-semibold mb-4">Personal Information</h3>
-            <div className="space-y-1">
-              <DetailRow label="Name" value={employee.name} />
-              <DetailRow label="Email" value={employee.email} />
-              <DetailRow label="Phone" value={employee.phone || "Not provided"} />
-              <DetailRow label="Address" value={employee.address || "Not provided"} />
+      <DialogContent className="sm:max-w-[900px] h-[90vh] flex flex-col p-0 rounded-xl overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-6 space-y-6">
+            {/* Employee Header */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100 shadow-sm">
+              <div className="flex items-center gap-6">
+                <div className="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+                  {(employee.user?.firstName || employee.firstName || 'N')[0]}
+                  {(employee.user?.lastName || employee.lastName || 'A')[0]}
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold text-gray-900 mb-1">
+                    {employee.user?.firstName || employee.firstName || 'Not provided'} {employee.user?.lastName || employee.lastName || ''}
+                  </h1>
+                  <p className="text-gray-600 text-base font-medium">
+                    Employee ID: {employee.employeeId || 'No ID'}
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
 
-          {/* Employment Details */}
-          <div>
-            <h3 className="text-lg font-semibold mb-4">Employment Details</h3>
-            <div className="space-y-1">
-              <DetailRow 
-                label="Department" 
-                value={
-                  <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                    {employee.department}
-                  </Badge>
-                } 
-              />
-              <DetailRow label="Role" value={employee.role} />
-              <DetailRow 
-                label="Status" 
-                value={
-                  <Badge 
-                    variant="outline" 
-                    className={`${
-                      employee.status === "Active" 
-                        ? "bg-green-50 text-green-700" 
-                        : employee.status === "Inactive"
-                        ? "bg-red-50 text-red-700"
-                        : "bg-yellow-50 text-yellow-700"
-                    }`}
-                  >
-                    {employee.status}
-                  </Badge>
-                } 
-              />
-              <DetailRow 
-                label="Join Date" 
-                value={format(new Date(employee.joinDate), 'PPP')} 
-              />
-              <DetailRow 
-                label="Employee ID" 
-                value={employee.employeeId || "Not assigned"} 
-              />
-              <DetailRow 
-                label="Salary" 
-                value={employee.salary ? `$${employee.salary.toLocaleString()}` : "Not provided"} 
-              />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Contact Information */}
+              <div className="bg-blue-50 rounded-xl p-6 shadow-sm border border-blue-100">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                    <Mail className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900">Contact Information</h2>
+                </div>
+                
+                <div className="space-y-5">
+                  <div className="flex items-start gap-4">
+                    <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                      <Mail className="h-4 w-4 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-500 mb-1">Email Address</p>
+                      <p className="font-semibold text-gray-900">{employee.user?.email || employee.email || "Not provided"}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start gap-4">
+                    <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                      <Phone className="h-4 w-4 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-500 mb-1">Phone Number</p>
+                      <p className="font-semibold text-gray-900">{employee.user?.phone || employee.phone || "Not provided"}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start gap-4">
+                    <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                      <MapPin className="h-4 w-4 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-500 mb-1">Address</p>
+                      <p className="font-semibold text-gray-900">
+                        {employee.address && typeof employee.address === 'object'
+                          ? [
+                              employee.address.street,
+                              employee.address.city,
+                              employee.address.state,
+                              employee.address.country,
+                              employee.address.postalCode
+                            ].filter(Boolean).join(', ') || "Not provided"
+                          : employee.address || "Not provided"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Professional Details */}
+              <div className="bg-green-50 rounded-xl p-6 shadow-sm border border-green-100">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
+                    <User className="h-5 w-5 text-green-600" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900">Professional Details</h2>
+                </div>
+                
+                <div className="space-y-5">
+                  <div className="flex items-start gap-4">
+                    <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                      <Building2 className="h-4 w-4 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-500 mb-1">Department</p>
+                      <p className="font-semibold text-gray-900">
+                        {typeof employee.department === 'object' ? employee.department?.name : employee.department || "Not specified"}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start gap-4">
+                    <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                      <User className="h-4 w-4 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-500 mb-1">Role</p>
+                      <p className="font-semibold text-gray-900">
+                        {(() => {
+                          if (employee.user?.roles && Array.isArray(employee.user.roles)) {
+                            if (employee.user.roles.length > 0) {
+                              return employee.user.roles.map((role: any) => 
+                                typeof role === 'object' ? (role.name || role) : role
+                              ).join(', ');
+                            }
+                          }
+                          if (employee.role) {
+                            return typeof employee.role === 'object' 
+                              ? (employee.role.name || 'Not specified')
+                              : employee.role;
+                          }
+                          return 'Not specified';
+                        })()}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start gap-4">
+                    <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                      <Calendar className="h-4 w-4 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-500 mb-1">Joining Date</p>
+                      <p className="font-semibold text-gray-900">
+                        {employee.joiningDate && isValid(new Date(employee.joiningDate))
+                          ? format(new Date(employee.joiningDate), 'PPP')
+                          : "Not specified"}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start gap-4">
+                    <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                      <IndianRupee className="h-4 w-4 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-500 mb-1">Salary</p>
+                      <p className="font-semibold text-gray-900">
+                        {employee.salary ? `₹${employee.salary.toLocaleString('en-IN')}` : "Not specified"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
 
-          {/* Emergency Contact */}
-          <div>
-            <h3 className="text-lg font-semibold mb-4">Emergency Contact</h3>
-            <div className="space-y-1">
-              <DetailRow 
-                label="Emergency Contact" 
-                value={employee.emergencyContact || "Not provided"} 
-              />
+            {/* Bank Details */}
+            <div className="bg-yellow-50 rounded-xl p-6 shadow-sm border border-yellow-100">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center">
+                  <CreditCard className="h-5 w-5 text-yellow-600" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900">Bank Details</h2>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                    <CreditCard className="h-4 w-4 text-yellow-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 mb-1">Account Number</p>
+                    <p className="font-semibold text-gray-900">{employee.bankDetails?.accountNumber || "Not provided"}</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                    <Building2 className="h-4 w-4 text-yellow-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 mb-1">Bank Name</p>
+                    <p className="font-semibold text-gray-900">{employee.bankDetails?.bankName || "Not provided"}</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                    <CreditCard className="h-4 w-4 text-yellow-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 mb-1">IFSC Code</p>
+                    <p className="font-semibold text-gray-900">{employee.bankDetails?.ifscCode || "Not provided"}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Emergency Contact */}
+            <div className="bg-purple-50 rounded-xl p-6 shadow-sm border border-purple-100">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                  <Users className="h-5 w-5 text-purple-600" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900">Emergency Contact</h2>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                    <User className="h-4 w-4 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 mb-1">Contact Name</p>
+                    <p className="font-semibold text-gray-900">
+                      {employee.emergencyContact && typeof employee.emergencyContact === 'object'
+                        ? employee.emergencyContact.name || 'Not provided'
+                        : 'Not provided'}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                    <Users className="h-4 w-4 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 mb-1">Relationship</p>
+                    <p className="font-semibold text-gray-900">
+                      {employee.emergencyContact && typeof employee.emergencyContact === 'object'
+                        ? employee.emergencyContact.relationship || 'Not provided'
+                        : 'Not provided'}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                    <Phone className="h-4 w-4 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 mb-1">Phone Number</p>
+                    <p className="font-semibold text-gray-900">
+                      {employee.emergencyContact && typeof employee.emergencyContact === 'object'
+                        ? employee.emergencyContact.phone || 'Not provided'
+                        : employee.emergencyContact || 'Not provided'}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

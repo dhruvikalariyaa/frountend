@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AddDepartmentDialog } from '@/components/employees/AddDepartmentDialog';
 import { ViewDepartmentDialog } from '@/components/employees/ViewDepartmentDialog';
 import {
@@ -41,217 +41,17 @@ import {
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
-// import { toast } from 'sonner';
-// import axios from 'axios';
-
-// Mock data for departments
-export interface Department {
-  id: number;
-  name: string;
-  code: string;
-  description: string;
-  manager: string;
-  location: string;
-  budget: number;
-  status: 'active' | 'inactive';
-  employeeCount: number;
-  projects: number;
-}
-
-export const mockDepartments: Department[] = [
-  {
-    id: 1,
-    name: 'Engineering',
-    code: 'ENG',
-    description: 'Software development and technical operations',
-    manager: 'John Doe',
-    location: 'Floor 3',
-    budget: 1000000,
-    status: 'active',
-    employeeCount: 45,
-    projects: 12,
-  },
-  {
-    id: 2,
-    name: 'Human Resources',
-    code: 'HR',
-    description: 'Employee management and recruitment',
-    manager: 'Jane Smith',
-    location: 'Floor 2',
-    budget: 500000,
-    status: 'active',
-    employeeCount: 15,
-    projects: 5,
-  },
-  {
-    id: 3,
-    name: 'Marketing',
-    code: 'MKT',
-    description: 'Brand management and digital marketing',
-    manager: 'Sarah Johnson',
-    location: 'Floor 4',
-    budget: 750000,
-    status: 'active',
-    employeeCount: 25,
-    projects: 8,
-  },
-  {
-    id: 4,
-    name: 'Finance',
-    code: 'FIN',
-    description: 'Financial planning and accounting',
-    manager: 'Michael Chen',
-    location: 'Floor 1',
-    budget: 600000,
-    status: 'active',
-    employeeCount: 20,
-    projects: 6,
-  },
-  {
-    id: 5,
-    name: 'Sales',
-    code: 'SLS',
-    description: 'Business development and client relations',
-    manager: 'David Wilson',
-    location: 'Floor 5',
-    budget: 1200000,
-    status: 'active',
-    employeeCount: 35,
-    projects: 15,
-  },
-  {
-    id: 6,
-    name: 'Research & Development',
-    code: 'R&D',
-    description: 'Product innovation and research',
-    manager: 'Emily Brown',
-    location: 'Floor 6',
-    budget: 1500000,
-    status: 'active',
-    employeeCount: 30,
-    projects: 10,
-  },
-  {
-    id: 7,
-    name: 'Customer Support',
-    code: 'CS',
-    description: 'Customer service and technical support',
-    manager: 'Robert Taylor',
-    location: 'Floor 2',
-    budget: 400000,
-    status: 'active',
-    employeeCount: 28,
-    projects: 4,
-  },
-  {
-    id: 8,
-    name: 'Legal',
-    code: 'LEG',
-    description: 'Legal compliance and corporate affairs',
-    manager: 'Lisa Anderson',
-    location: 'Floor 1',
-    budget: 450000,
-    status: 'active',
-    employeeCount: 12,
-    projects: 3,
-  },
-  {
-    id: 9,
-    name: 'Quality Assurance',
-    code: 'QA',
-    description: 'Quality control and testing',
-    manager: 'James Wilson',
-    location: 'Floor 3',
-    budget: 550000,
-    status: 'inactive',
-    employeeCount: 18,
-    projects: 7,
-  },
-  {
-    id: 10,
-    name: 'Operations',
-    code: 'OPS',
-    description: 'Business operations and logistics',
-    manager: 'Patricia Martinez',
-    location: 'Floor 2',
-    budget: 800000,
-    status: 'active',
-    employeeCount: 22,
-    projects: 9,
-  },
-  {
-    id: 11,
-    name: 'Product Management',
-    code: 'PM',
-    description: 'Product strategy and roadmap',
-    manager: 'Thomas Lee',
-    location: 'Floor 4',
-    budget: 650000,
-    status: 'active',
-    employeeCount: 15,
-    projects: 11,
-  },
-  {
-    id: 12,
-    name: 'Information Technology',
-    code: 'IT',
-    description: 'IT infrastructure and support',
-    manager: 'Rachel Green',
-    location: 'Floor 3',
-    budget: 900000,
-    status: 'active',
-    employeeCount: 25,
-    projects: 8,
-  }
-];
+import { createDepartment, getDepartments, updateDepartment, deleteDepartment } from '@/services/department.service';
+import { useToast } from '@/components/ui/use-toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 
 type SortField = 'name' | 'code' | 'manager' | 'budget' | 'status';
 type SortOrder = 'asc' | 'desc';
 
-/* 
-// Types for API integration
-interface Department {
-  id: number;
-  name: string;
-  code: string;
-  description: string;
-  manager: string;
-  location: string;
-  budget: number;
-  status: 'active' | 'inactive';
-  employeeCount: number;
-  projects: number;
-}
-
-// API Service
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
-
-const departmentService = {
-  getAll: async () => {
-    const response = await axios.get(`${API_BASE_URL}/departments`);
-    return response.data;
-  },
-  
-  create: async (department: Omit<Department, 'id'>) => {
-    const response = await axios.post(`${API_BASE_URL}/departments`, department);
-    return response.data;
-  },
-  
-  update: async (id: number, department: Partial<Department>) => {
-    const response = await axios.put(`${API_BASE_URL}/departments/${id}`, department);
-    return response.data;
-  },
-  
-  delete: async (id: number) => {
-    await axios.delete(`${API_BASE_URL}/departments/${id}`);
-  }
-};
-*/
-
 export default function DepartmentsPage() {
-  // const [departments, setDepartments] = useState<Department[]>([]);
-  // const [loading, setLoading] = useState(true);
-  // const [error, setError] = useState<string | null>(null);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
@@ -264,18 +64,24 @@ export default function DepartmentsPage() {
   const [isAddEditOpen, setIsAddEditOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<any>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [departmentToDelete, setDepartmentToDelete] = useState<any>(null);
+  const { toast } = useToast();
 
-  /* 
-  // Fetch departments from API
   const fetchDepartments = async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await departmentService.getAll();
-      setDepartments(data);
+      const res = await getDepartments();
+      console.log('API departments response:', res);
+      setDepartments(res.data.data || []);
     } catch (err) {
       setError('Failed to fetch departments');
-      toast.error('Failed to fetch departments');
+      toast({
+        title: "Failed to fetch departments",
+        description: "",
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
@@ -284,60 +90,56 @@ export default function DepartmentsPage() {
   useEffect(() => {
     fetchDepartments();
   }, []);
-  */
 
   const handleBudgetRangeChange = (value: number[]) => {
     setBudgetRange([value[0], value[1]]);
   };
 
-  /* 
-  // API handlers for CRUD operations
-  const handleAddDepartment = async (newDepartment: Omit<Department, 'id'>) => {
+  const handleAddDepartment = async (newDepartment: any) => {
     try {
-      const addedDepartment = await departmentService.create(newDepartment);
-      setDepartments(prev => [...prev, addedDepartment]);
-      toast.success('Department added successfully');
+      const { name, description } = newDepartment;
+      await createDepartment({ name, description });
+      toast({
+        title: '✅ Department Added',
+        description: `Department "${name}" created successfully and saved to database.`,
+        duration: 1500,
+      });
+      fetchDepartments();
     } catch (err) {
-      toast.error('Failed to add department');
+      toast({
+        title: '❌ Add Failed',
+        description: 'Failed to add department.',
+        variant: 'destructive',
+        duration: 1500,
+      });
     }
   };
 
-  const handleEditDepartment = async (id: number, updatedData: Partial<Department>) => {
+  const handleEditSubmit = async (updatedDepartment: any) => {
+    if (!editingDepartment || !editingDepartment._id) return;
+    const patchData = {
+      name: updatedDepartment.name,
+      description: updatedDepartment.description,
+      isActive: updatedDepartment.status === 'active',
+    };
     try {
-      const updatedDepartment = await departmentService.update(id, updatedData);
-      setDepartments(prev => prev.map(dept => 
-        dept.id === id ? { ...dept, ...updatedDepartment } : dept
-      ));
-      toast.success('Department updated successfully');
+      await updateDepartment(editingDepartment._id, patchData);
+      toast({
+        title: '✅ Department Updated',
+        description: `Department "${patchData.name}" updated successfully.`,
+        duration: 1500,
+      });
+      setIsAddEditOpen(false);
+      setEditingDepartment(null);
+      fetchDepartments();
     } catch (err) {
-      toast.error('Failed to update department');
+      toast({
+        title: '❌ Update Failed',
+        description: 'Failed to update department.',
+        variant: 'destructive',
+        duration: 1500,
+      });
     }
-  };
-
-  const handleDeleteDepartment = async (id: number) => {
-    try {
-      await departmentService.delete(id);
-      setDepartments(prev => prev.filter(dept => dept.id !== id));
-      toast.success('Department deleted successfully');
-    } catch (err) {
-      toast.error('Failed to delete department');
-    }
-  };
-  */
-
-  const handleAddDepartment = (newDepartment: any) => {
-    console.log('Add department:', newDepartment);
-    // Will be replaced with API call
-  };
-
-
-  const handleEditSubmit = (updatedDepartment: any) => {
-    console.log('Updated department:', {
-      id: editingDepartment.id,
-      ...updatedDepartment
-    });
-    setIsAddEditOpen(false);
-    setEditingDepartment(null);
   };
 
   const handleViewDetails = (department: any) => {
@@ -345,9 +147,27 @@ export default function DepartmentsPage() {
     setIsDetailsOpen(true);
   };
 
-  const handleDeleteDepartment = (id: number) => {
-    console.log('Delete department:', id);
-    // Will be replaced with API call
+  const handleDeleteDepartment = async () => {
+    if (!departmentToDelete) return;
+    try {
+      await deleteDepartment(departmentToDelete._id || departmentToDelete.id);
+      toast({
+        title: '✅ Department Deleted',
+        description: `Department "${departmentToDelete?.name}" deleted successfully.`,
+        duration: 1500,
+      });
+      fetchDepartments();
+    } catch (err) {
+      toast({
+        title: '❌ Delete Failed',
+        description: 'Failed to delete department.',
+        variant: 'destructive',
+        duration: 1500,
+      });
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setDepartmentToDelete(null);
+    }
   };
 
   const handleRefresh = async () => {
@@ -372,13 +192,19 @@ export default function DepartmentsPage() {
     setCurrentPage(1);
   };
 
-  const filteredDepartments = mockDepartments
+  const filteredDepartments = departments.map((department) => ({
+      ...department,
+      budget: department.budget ?? 0,
+      employeeCount: department.employeeCount ?? 0,
+      projects: department.projects ?? 0,
+      status: department.isActive ? 'active' : 'inactive',
+    }))
     .filter((department) => {
       const matchesSearch =
         searchQuery === '' ||
         department.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        department.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        department.manager.toLowerCase().includes(searchQuery.toLowerCase());
+        (department.code || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (department.manager || '').toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesStatus = statusFilter === 'all' || department.status === statusFilter;
       const matchesBudget =
@@ -423,130 +249,119 @@ export default function DepartmentsPage() {
   };
 
   const departmentStats = {
-    totalDepartments: mockDepartments.length,
-    totalEmployees: mockDepartments.reduce((sum, dept) => sum + dept.employeeCount, 0),
-    totalBudget: mockDepartments.reduce((sum, dept) => sum + dept.budget, 0),
-    activeDepartments: mockDepartments.filter((dept) => dept.status === 'active').length,
+    totalDepartments: departments.length,
+    totalEmployees: departments.reduce((sum, dept) => sum + (dept.employeeCount ?? 0), 0),
+    totalBudget: departments.reduce((sum, dept) => sum + (dept.budget ?? 0), 0),
+    activeDepartments: departments.filter((dept) => dept.isActive).length,
   };
 
-  /* 
-  // Loading and error states for API integration
-  if (loading) {
-    return <div className="flex justify-center items-center h-screen">Loading...</div>;
-  }
-
-  if (error) {
-    return <div className="flex justify-center items-center h-screen text-red-500">{error}</div>;
-  }
-  */
-
   return (
-    <div className="space-y-6 p-6 pb-16">
-      <div className="flex flex-col space-y-4">
-        <div className="flex items-center justify-between">
+    <div className="space-y-6 p-2 sm:p-4 md:p-6 pb-16 w-full max-w-full">
+      <div className="flex flex-col space-y-4 w-full max-w-full">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 w-full">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Department Management</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Department Management</h1>
           </div>
-          <div className="flex items-center space-x-4">
-        <Button onClick={() => {
-          setEditingDepartment(null);
-          setIsAddEditOpen(true);
-        }}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Department
-        </Button>
+          <div className="flex items-center space-x-2 sm:space-x-4 w-full sm:w-auto">
+            <Button onClick={() => {
+              setEditingDepartment(null);
+              setIsAddEditOpen(true);
+            }} className="w-full sm:w-auto">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Department
+            </Button>
           </div>
-      </div>
+        </div>
 
-      {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-        <Card className="hover:shadow-md transition-shadow">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center gap-3 sm:gap-4">
-              <div className="p-2 sm:p-3 bg-blue-100 rounded-lg">
-                <Building2 className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
-              </div>
-              <div>
-                <div className="text-xs sm:text-sm font-medium text-muted-foreground">Total Departments</div>
-                <div className="text-xl sm:text-2xl font-bold">{departmentStats.totalDepartments}</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="hover:shadow-md transition-shadow">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center gap-3 sm:gap-4">
-              <div className="p-2 sm:p-3 bg-green-100 rounded-lg">
-                <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
-              </div>
-              <div>
-                <div className="text-xs sm:text-sm font-medium text-muted-foreground">Total Budget</div>
-                <div className="text-xl sm:text-2xl font-bold">
-                  ${departmentStats.totalBudget.toLocaleString()}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 w-full">
           <Card className="hover:shadow-md transition-shadow">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center gap-3 sm:gap-4">
-              <div className="p-2 sm:p-3 bg-purple-100 rounded-lg">
-                <Users className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600" />
-              </div>
-              <div>
-                <div className="text-xs sm:text-sm font-medium text-muted-foreground">Active Departments</div>
-                <div className="text-xl sm:text-2xl font-bold">{departmentStats.activeDepartments}</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters & Search */}
-        <Card>
-        <CardContent className="p-4">
-          <div className="mb-3">
-            <h2 className="text-lg font-semibold text-gray-900">Filters & Search</h2>
-            </div>
-          <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 w-full">
-            <div className="relative w-full md:max-w-xs">
-              <Input
-                placeholder="Search by name, code, or manager..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 h-10 rounded-lg border-gray-200 focus:border-blue-500 focus:ring-blue-500 text-sm bg-white"
-              />
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-10 rounded-lg border-gray-200 focus:border-blue-500 focus:ring-blue-500 text-sm w-full md:w-36 bg-white">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="flex-1 flex flex-col gap-2">
-              <div className="text-sm font-medium">Budget Range</div>
-              <div className="flex items-center gap-4">
-                <Slider
-                  defaultValue={[0, 2000000]}
-                  max={2000000}
-                  step={100000}
-                  value={budgetRange}
-                  onValueChange={handleBudgetRangeChange}
-                  className="w-full"
-                  minStepsBetweenThumbs={1}
-                />
-                <div className="text-sm text-gray-500 min-w-[120px] whitespace-nowrap">
-                  ${budgetRange[0].toLocaleString()} - ${budgetRange[1].toLocaleString()}
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="p-2 sm:p-3 bg-blue-100 rounded-lg">
+                  <Building2 className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
+                </div>
+                <div>
+                  <div className="text-xs sm:text-sm font-medium text-muted-foreground">Total Departments</div>
+                  <div className="text-xl sm:text-2xl font-bold">{departmentStats.totalDepartments}</div>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+          <Card className="hover:shadow-md transition-shadow">
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="p-2 sm:p-3 bg-green-100 rounded-lg">
+                  <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
+                </div>
+                <div>
+                  <div className="text-xs sm:text-sm font-medium text-muted-foreground">Total Budget</div>
+                  <div className="text-xl sm:text-2xl font-bold">
+                    ${departmentStats.totalBudget.toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="hover:shadow-md transition-shadow">
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="p-2 sm:p-3 bg-purple-100 rounded-lg">
+                  <Users className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600" />
+                </div>
+                <div>
+                  <div className="text-xs sm:text-sm font-medium text-muted-foreground">Active Departments</div>
+                  <div className="text-xl sm:text-2xl font-bold">{departmentStats.activeDepartments}</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Filters & Search */}
+        <Card className="w-full">
+          <CardContent className="p-2 sm:p-4">
+            <div className="mb-3">
+              <h2 className="text-lg font-semibold text-gray-900">Filters & Search</h2>
             </div>
-            <div className="flex-1 flex justify-end">
+            <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 w-full">
+              <div className="relative w-full md:max-w-xs">
+                <Input
+                  placeholder="Search by name, code, or manager..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 h-10 rounded-lg border-gray-200 focus:border-blue-500 focus:ring-blue-500 text-sm bg-white"
+                />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="h-10 rounded-lg border-gray-200 focus:border-blue-500 focus:ring-blue-500 text-sm w-full md:w-36 bg-white">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="flex-1 flex flex-col gap-2">
+                <div className="text-sm font-medium">Budget Range</div>
+                <div className="flex items-center gap-4">
+                  <Slider
+                    defaultValue={[0, 2000000]}
+                    max={2000000}
+                    step={100000}
+                    value={budgetRange}
+                    onValueChange={handleBudgetRangeChange}
+                    className="w-full"
+                    minStepsBetweenThumbs={1}
+                  />
+                  <div className="text-sm text-gray-500 min-w-[120px] whitespace-nowrap">
+                    ${budgetRange[0].toLocaleString()} - ${budgetRange[1].toLocaleString()}
+                  </div>
+                </div>
+              </div>
+              <div className="flex-1 flex justify-end">
                 <Button 
                   onClick={handleExport} 
                   size="icon" 
@@ -555,17 +370,17 @@ export default function DepartmentsPage() {
                   <Download className="w-5 h-5" />
                 </Button>
               </div>
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Table and Pagination */}
-        <Card>
-          <CardHeader className="pb-4">
+        {/* Table and Pagination */}
+        <Card className="w-full overflow-x-auto">
+          <CardHeader className="pb-4 min-w-[600px]">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>Department List</CardTitle>
-                </div>
+              </div>
               <div className="flex items-center space-x-2">
                 <Select
                   value={itemsPerPage.toString()}
@@ -603,11 +418,11 @@ export default function DepartmentsPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="rounded-md border">
-            <Table>
+          <CardContent className="overflow-x-auto p-2 sm:p-4">
+            <div className="rounded-md border w-full min-w-[600px] overflow-x-auto">
+              <Table className="w-full min-w-[600px] text-xs sm:text-sm">
                 <TableHeader>
-                <TableRow>
+                  <TableRow>
                     <TableHead className="cursor-pointer" onClick={() => handleSort('name')}>
                       <div className="flex items-center space-x-1">
                         <span>Name</span>
@@ -633,18 +448,18 @@ export default function DepartmentsPage() {
                     </TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isRefreshing ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
-                      <div className="flex flex-col items-center space-y-2">
-                        <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-                        <span className="text-sm text-muted-foreground">Loading departments...</span>
-                      </div>
-                    </TableCell>
                   </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isRefreshing ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        <div className="flex flex-col items-center space-y-2">
+                          <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+                          <span className="text-sm text-muted-foreground">Loading departments...</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
                   ) : paginatedDepartments.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8">
@@ -659,113 +474,143 @@ export default function DepartmentsPage() {
                         </div>
                       </TableCell>
                     </TableRow>
-                ) : (
-                  paginatedDepartments.map((department) => (
+                  ) : (
+                    paginatedDepartments.map((department) => (
                       <TableRow key={department.id} className="hover:bg-gray-50">
                         <TableCell className="font-medium">{department.name}</TableCell>
                         <TableCell>{department.code}</TableCell>
                         <TableCell>{department.manager}</TableCell>
                         <TableCell>{department.location}</TableCell>
                         <TableCell>${department.budget.toLocaleString()}</TableCell>
-                      <TableCell>
+                        <TableCell>
                           <Badge 
                             variant="outline" 
-                            className={`${
+                            className={
                               department.status === "active" 
-                                ? "bg-green-50 text-green-700" 
-                                : "bg-red-50 text-red-700"
-                          }`}
-                        >
-                          {department.status.charAt(0).toUpperCase() + department.status.slice(1)}
+                                ? "bg-green-100 text-green-700 border-green-200" 
+                                : department.status === "inactive"
+                                ? "bg-red-100 text-red-700 border-red-200"
+                                : "bg-gray-100 text-gray-700 border-gray-200"
+                            }
+                          >
+                            {department.status
+                              ? department.status.charAt(0).toUpperCase() + department.status.slice(1)
+                              : 'N/A'}
                           </Badge>
-                      </TableCell>
+                        </TableCell>
                         <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleViewDetails(department)}>
-                              <Eye className="mr-2 h-4 w-4" />
-                              View Details
-                            </DropdownMenuItem>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleViewDetails(department)}>
+                                <Eye className="mr-2 h-4 w-4" />
+                                View Details
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => {
                                 setEditingDepartment(department);
                                 setIsAddEditOpen(true);
                               }}>
-                              <Edit className="mr-2 h-4 w-4" />
-                              Edit
-                            </DropdownMenuItem>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
+                              </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                            <DropdownMenuItem 
-                              className="text-red-600"
-                              onClick={() => handleDeleteDepartment(department.id)}
-                            >
-                              <Trash className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                              <DropdownMenuItem 
+                                className="text-red-600"
+                                onClick={() => {
+                                  setDepartmentToDelete(department);
+                                  setIsDeleteDialogOpen(true);
+                                }}
+                              >
+                                <Trash className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
 
-          {/* Pagination */}
+            {/* Pagination */}
             {!isRefreshing && paginatedDepartments.length > 0 && (
               <div className="flex items-center justify-between mt-4 px-4">
-            <div className="text-sm text-gray-500">
-              Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredDepartments.length)} of {filteredDepartments.length} entries
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
+                <div className="text-sm text-gray-500">
+                  Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredDepartments.length)} of {filteredDepartments.length} entries
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
                     onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-                className="h-8 px-3 text-sm"
-              >
-                Previous
-              </Button>
-              <Button 
+                    disabled={currentPage === 1}
+                    className="h-8 px-3 text-sm"
+                  >
+                    Previous
+                  </Button>
+                  <Button 
                     variant="default"
                     className="h-8 w-8 p-0 text-sm bg-[#000000] hover:bg-[#000000] text-white"
-                disabled
-              >
-                {currentPage}
-              </Button>
-              <Button
-                variant="outline"
+                    disabled
+                  >
+                    {currentPage}
+                  </Button>
+                  <Button
+                    variant="outline"
                     onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}
-                className="h-8 px-3 text-sm"
-              >
-                Next
-              </Button>
-            </div>
-          </div>
+                    disabled={currentPage === totalPages}
+                    className="h-8 px-3 text-sm"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
             )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {/* View Department Dialog */}
-      <ViewDepartmentDialog
-        department={selectedDepartment}
-        open={isDetailsOpen}
-        onOpenChange={setIsDetailsOpen}
-      />
+        {/* View Department Dialog */}
+        <ViewDepartmentDialog
+          department={selectedDepartment}
+          open={isDetailsOpen && !!selectedDepartment}
+          onOpenChange={(open) => {
+            setIsDetailsOpen(open);
+            if (!open) setSelectedDepartment(null);
+          }}
+        />
 
-      {/* Add/Edit Department Dialog */}
-      <AddDepartmentDialog
-        open={isAddEditOpen}
-        onOpenChange={setIsAddEditOpen}
-        onSubmit={editingDepartment ? handleEditSubmit : handleAddDepartment}
-        initialData={editingDepartment}
-      />
+        {/* Add/Edit Department Dialog */}
+        <AddDepartmentDialog
+          open={isAddEditOpen}
+          onOpenChange={setIsAddEditOpen}
+          onSubmit={editingDepartment ? handleEditSubmit : handleAddDepartment}
+          initialData={editingDepartment}
+        />
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Department</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete the department "{departmentToDelete?.name}"? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleDeleteDepartment}>
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

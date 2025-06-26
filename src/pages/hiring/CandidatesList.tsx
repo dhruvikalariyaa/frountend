@@ -1177,281 +1177,350 @@ const CandidatesList: React.FC<CandidatesListProps> = ({ limit, showFilters = tr
           setSelectedProfile(null);
         }
       }}>
-        <DialogContent className="sm:max-w-[900px] max-h-[90vh] flex flex-col">
-          <DialogHeader className="border-b pb-4 flex-shrink-0">
-            <DialogTitle className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">
-                    {selectedProfile && candidateService.getCandidateFullName(selectedProfile)}
-                  </h2>
-                  <p className="text-sm text-gray-500">
-                    {selectedProfile?.currentRole || 'Position not specified'}
-                  </p>
-                </div>
-              </div>
+        <DialogContent className="sm:max-w-[900px] h-[90vh] flex flex-col p-0 rounded-xl overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-6 space-y-6">
               {selectedProfile && (
-                <div className="flex items-center gap-2">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        disabled={selectedProfile.status === 'rejected'}
-                        title={selectedProfile.status === 'rejected' ? 'Cannot update status - Application has been terminated' : ''}
-                        className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200"
-                      >
-                        Update Status
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <DropdownMenuItem onClick={() => {
-                        if (selectedProfile) {
-                          handleUpdateStatus(selectedProfile, 'interview');
-                        }
-                      }}>
-                        Schedule Interview
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => {
-                        if (selectedProfile) {
-                          handleUpdateStatus(selectedProfile, 'rejected');
-                        }
-                      }}>
-                        Reject Application
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                 
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="bg-gray-50 hover:bg-gray-100">
-                        Actions
-                    </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <DropdownMenuItem 
-                        onClick={() => selectedProfile && handleSendEmail(selectedProfile)}
-                      >
-                        <Mail className="h-4 w-4 mr-2" />
-                        Send Email
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => selectedProfile && handleEditCandidate(selectedProfile)}
-                        disabled={selectedProfile.status === 'rejected'}
-                      >
-                        <Edit className="h-4 w-4 mr-2" />
-                        Edit Candidate
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => selectedProfile && handleViewResume(selectedProfile)}
-                      >
-                        <FileText className="h-4 w-4 mr-2" />
-                        View Resume
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => selectedProfile && handleDeleteCandidate(selectedProfile)}
-                        className="text-red-600"
-                      >
-                        <X className="h-4 w-4 mr-2" />
-                        Delete Candidate
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              )}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto p-6 space-y-6 min-h-0">
-            {selectedProfile && (
-              <>
-                {selectedProfile.status === 'rejected' && (
-                  <div className="bg-gradient-to-r from-red-50 to-red-100 border border-red-200 rounded-xl p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                        <X className="h-5 w-5 text-red-600" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-semibold text-red-800">Application Terminated</h4>
-                        <p className="text-sm text-red-600 mt-1">
-                          This candidate's application has been rejected. No further status updates or edits are allowed.
-                        </p>
+                <>
+                  {selectedProfile.status === 'rejected' && (
+                    <div className="bg-gradient-to-r from-red-50 to-red-100 border border-red-200 rounded-xl p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                          <X className="h-5 w-5 text-red-600" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-semibold text-red-800">Application Terminated</h4>
+                          <p className="text-sm text-red-600 mt-1">
+                            This candidate's application has been rejected. No further status updates or edits are allowed.
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Status and Basic Info */}
-                <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Application Status</h3>
-                    <Badge 
-                      variant="outline" 
-                      className="px-3 py-1 text-sm font-medium"
-                      style={{ 
-                        backgroundColor: `${getStatusColor(selectedProfile.status)}15`,
-                        color: getStatusColor(selectedProfile.status),
-                        borderColor: `${getStatusColor(selectedProfile.status)}30`
-                      }}
-                    >
-                      {candidateService.getStatusDisplayText(selectedProfile.status)}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Calendar className="h-4 w-4" />
-                    <span>Applied on {new Date(selectedProfile.createdAt).toLocaleDateString()}</span>
-                  </div>
-                </div>
-
-                {/* Contact and Professional Info Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                      <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <Mail className="h-4 w-4 text-blue-600" />
-                      </div>
-                      Contact Information
-                    </h3>
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                        <Mail className="h-5 w-5 text-gray-400" />
+                  {/* Candidate Header */}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-6">
+                        <div className="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+                          {(selectedProfile.firstName || 'N')[0]}
+                          {(selectedProfile.lastName || 'A')[0]}
+                        </div>
                         <div>
-                          <p className="text-sm text-gray-500">Email</p>
-                          <p className="font-medium text-gray-900">{selectedProfile.email}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                        <Phone className="h-5 w-5 text-gray-400" />
-                        <div>
-                          <p className="text-sm text-gray-500">Phone</p>
-                          <p className="font-medium text-gray-900">{selectedProfile.phone}</p>
-                        </div>
-                      </div>
-                      {selectedProfile.currentCompany && (
-                        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                          <Building2 className="h-5 w-5 text-gray-400" />
-                          <div>
-                            <p className="text-sm text-gray-500">Current Company</p>
-                            <p className="font-medium text-gray-900">{selectedProfile.currentCompany}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                      <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                        <User className="h-4 w-4 text-green-600" />
-                      </div>
-                      Professional Details
-                    </h3>
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                        <Building2 className="h-5 w-5 text-gray-400" />
-                        <div>
-                          <p className="text-sm text-gray-500">Department</p>
-                          <p className="font-medium text-gray-900">{selectedProfile.department || 'Not specified'}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                        <Clock className="h-5 w-5 text-gray-400" />
-                        <div>
-                          <p className="text-sm text-gray-500">Experience</p>
-                          <p className="font-medium text-gray-900">{selectedProfile.experienceYears} years</p>
-                        </div>
-                      </div>
-                      {selectedProfile.expectedSalary && (
-                        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                          <div className="h-5 w-5 text-gray-400 flex items-center justify-center text-sm font-bold">₹</div>
-                          <div>
-                            <p className="text-sm text-gray-500">Expected Salary</p>
-                            <p className="font-medium text-gray-900">₹{selectedProfile.expectedSalary.toLocaleString()}</p>
-                          </div>
-                        </div>
-                      )}
-                      {selectedProfile.noticePeriod && (
-                        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                          <Calendar className="h-5 w-5 text-gray-400" />
-                          <div>
-                            <p className="text-sm text-gray-500">Notice Period</p>
-                            <p className="font-medium text-gray-900">{selectedProfile.noticePeriod}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Timeline Section */}
-                <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2">
-                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <Activity className="h-4 w-4 text-purple-600" />
-                    </div>
-                    Application Timeline
-                  </h3>
-                  <div className="space-y-4 max-h-80 overflow-y-auto">
-                    {selectedProfile.timeline && selectedProfile.timeline.length > 0 ? (
-                      selectedProfile.timeline.map((event: TimelineEntry, index: number) => (
-                        <div key={event._id} className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                          <div className="flex flex-col items-center">
-                            <div 
-                              className="w-3 h-3 rounded-full border-2 border-white shadow-sm"
-                              style={{ backgroundColor: getStatusColor(event.subType || 'default') }}
-                            />
-                            {index < (selectedProfile.timeline?.length || 0) - 1 && (
-                              <div className="w-0.5 h-8 bg-gray-200 mt-2" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between mb-2">
-                              <p className="font-semibold text-gray-900">
-                                {event.type === 'status_change' || event.subType === 'status_change'
-                                  ? (event.metadata?.newStatus 
-                                      ? `Status changed to ${candidateService.getStatusDisplayText(event.metadata.newStatus as Candidate['status'])}`
-                                      : event.title
-                                    )
-                                  : event.title
-                                }
-                              </p>
-                              <Badge variant="outline" className="text-xs bg-white">
-                                {new Date(event.createdAt).toLocaleDateString()}
-                              </Badge>
+                          <h1 className="text-3xl font-bold text-gray-900 mb-1">
+                            {candidateService.getCandidateFullName(selectedProfile)}
+                          </h1>
+                          <p className="text-gray-600 text-base font-medium">
+                            {selectedProfile.currentRole || 'Position not specified'}
+                          </p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <Badge 
+                              variant="outline" 
+                              className="px-3 py-1 text-sm font-medium"
+                              style={{ 
+                                backgroundColor: `${getStatusColor(selectedProfile.status)}15`,
+                                color: getStatusColor(selectedProfile.status),
+                                borderColor: `${getStatusColor(selectedProfile.status)}30`
+                              }}
+                            >
+                              {candidateService.getStatusDisplayText(selectedProfile.status)}
+                            </Badge>
+                            <div className="flex items-center gap-1 text-sm text-gray-600">
+                              <Calendar className="h-4 w-4" />
+                              <span>Applied {new Date(selectedProfile.createdAt).toLocaleDateString()}</span>
                             </div>
-                            <p className="text-sm text-gray-600 mb-2">{event.description}</p>
-                            {event.createdBy && (
-                              <p className="text-xs text-gray-500">
-                                by {event.createdBy.firstName} {event.createdBy.lastName}
-                              </p>
-                            )}
                           </div>
                         </div>
-                      ))
-                    ) : (
-                      <div className="text-center py-8">
-                        <Activity className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                        <p className="text-sm text-gray-500">No timeline events available</p>
                       </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Notes Section */}
-                {selectedProfile.notes && (
-                  <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                      <div className="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center">
-                        <FileText className="h-4 w-4 text-yellow-600" />
+                      <div className="flex items-center gap-2">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              disabled={selectedProfile.status === 'rejected'}
+                              title={selectedProfile.status === 'rejected' ? 'Cannot update status - Application has been terminated' : ''}
+                              className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200"
+                            >
+                              Update Status
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            <DropdownMenuItem onClick={() => {
+                              if (selectedProfile) {
+                                handleUpdateStatus(selectedProfile, 'interview');
+                              }
+                            }}>
+                              Schedule Interview
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => {
+                              if (selectedProfile) {
+                                handleUpdateStatus(selectedProfile, 'rejected');
+                              }
+                            }}>
+                              Reject Application
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                       
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="bg-gray-50 hover:bg-gray-100">
+                              Actions
+                          </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            <DropdownMenuItem 
+                              onClick={() => selectedProfile && handleSendEmail(selectedProfile)}
+                            >
+                              <Mail className="h-4 w-4 mr-2" />
+                              Send Email
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => selectedProfile && handleEditCandidate(selectedProfile)}
+                              disabled={selectedProfile.status === 'rejected'}
+                            >
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit Candidate
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => selectedProfile && handleViewResume(selectedProfile)}
+                            >
+                              <FileText className="h-4 w-4 mr-2" />
+                              View Resume
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => selectedProfile && handleDeleteCandidate(selectedProfile)}
+                              className="text-red-600"
+                            >
+                              <X className="h-4 w-4 mr-2" />
+                              Delete Candidate
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
-                      Notes
-                    </h3>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <p className="text-gray-700 leading-relaxed">{selectedProfile.notes}</p>
                     </div>
                   </div>
-                )}
-              </>
-            )}
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Contact Information */}
+                    <div className="bg-blue-50 rounded-xl p-6 shadow-sm border border-blue-100">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                          <Mail className="h-5 w-5 text-blue-600" />
+                        </div>
+                        <h2 className="text-xl font-bold text-gray-900">Contact Information</h2>
+                      </div>
+                      
+                      <div className="space-y-5">
+                        <div className="flex items-start gap-4">
+                          <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                            <Mail className="h-4 w-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-500 mb-1">Email Address</p>
+                            <p className="font-semibold text-gray-900">{selectedProfile.email}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-start gap-4">
+                          <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                            <Phone className="h-4 w-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-500 mb-1">Phone Number</p>
+                            <p className="font-semibold text-gray-900">{selectedProfile.phone}</p>
+                          </div>
+                        </div>
+                        
+                        {selectedProfile.currentCompany && (
+                          <div className="flex items-start gap-4">
+                            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                              <Building2 className="h-4 w-4 text-blue-600" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-500 mb-1">Current Company</p>
+                              <p className="font-semibold text-gray-900">{selectedProfile.currentCompany}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Professional Details */}
+                    <div className="bg-green-50 rounded-xl p-6 shadow-sm border border-green-100">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
+                          <User className="h-5 w-5 text-green-600" />
+                        </div>
+                        <h2 className="text-xl font-bold text-gray-900">Professional Details</h2>
+                      </div>
+                      
+                      <div className="space-y-5">
+                        <div className="flex items-start gap-4">
+                          <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                            <Building2 className="h-4 w-4 text-green-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-500 mb-1">Department</p>
+                            <p className="font-semibold text-gray-900">{selectedProfile.department || 'Not specified'}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-start gap-4">
+                          <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                            <Clock className="h-4 w-4 text-green-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-500 mb-1">Experience</p>
+                            <p className="font-semibold text-gray-900">{selectedProfile.experienceYears} years</p>
+                          </div>
+                        </div>
+                        
+                        {selectedProfile.expectedSalary && (
+                          <div className="flex items-start gap-4">
+                            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                              <div className="text-green-600 font-bold text-sm">₹</div>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-500 mb-1">Expected Salary</p>
+                              <p className="font-semibold text-gray-900">₹{selectedProfile.expectedSalary.toLocaleString()}</p>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {selectedProfile.noticePeriod && (
+                          <div className="flex items-start gap-4">
+                            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                              <Calendar className="h-4 w-4 text-green-600" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-500 mb-1">Notice Period</p>
+                              <p className="font-semibold text-gray-900">{selectedProfile.noticePeriod}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Resume Section */}
+                  <div className="bg-yellow-50 rounded-xl p-6 shadow-sm border border-yellow-100">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center">
+                        <FileText className="h-5 w-5 text-yellow-600" />
+                      </div>
+                      <h2 className="text-xl font-bold text-gray-900">Resume & Documents</h2>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="flex items-start gap-4">
+                        <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                          <FileText className="h-4 w-4 text-yellow-600" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-500 mb-1">Resume</p>
+                          {selectedProfile.resumeLink ? (
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-gray-900">Available</p>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleViewResume(selectedProfile)}
+                                className="bg-yellow-100 hover:bg-yellow-200 text-yellow-700 border-yellow-200 h-7 px-2 text-xs"
+                              >
+                                <FileText className="h-3 w-3 mr-1" />
+                                View
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleDownloadResume(selectedProfile)}
+                                className="bg-yellow-100 hover:bg-yellow-200 text-yellow-700 border-yellow-200 h-7 px-2 text-xs"
+                              >
+                                <Download className="h-3 w-3 mr-1" />
+                                Download
+                              </Button>
+                            </div>
+                          ) : (
+                            <p className="font-semibold text-gray-500">Not uploaded</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Timeline Section */}
+                  <div className="bg-purple-50 rounded-xl p-6 shadow-sm border border-purple-100">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                        <Activity className="h-5 w-5 text-purple-600" />
+                      </div>
+                      <h2 className="text-xl font-bold text-gray-900">Application Timeline</h2>
+                    </div>
+                    <div className="space-y-4 max-h-80 overflow-y-auto">
+                      {selectedProfile.timeline && selectedProfile.timeline.length > 0 ? (
+                        selectedProfile.timeline.map((event: TimelineEntry, index: number) => (
+                          <div key={event._id} className="flex items-start gap-4 p-4 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow">
+                            <div className="flex flex-col items-center">
+                              <div 
+                                className="w-3 h-3 rounded-full border-2 border-white shadow-sm"
+                                style={{ backgroundColor: getStatusColor(event.subType || 'default') }}
+                              />
+                              {index < (selectedProfile.timeline?.length || 0) - 1 && (
+                                <div className="w-0.5 h-8 bg-gray-200 mt-2" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="font-semibold text-gray-900">
+                                  {event.type === 'status_change' || event.subType === 'status_change'
+                                    ? (event.metadata?.newStatus 
+                                        ? `Status changed to ${candidateService.getStatusDisplayText(event.metadata.newStatus as Candidate['status'])}`
+                                        : event.title
+                                      )
+                                    : event.title
+                                  }
+                                </p>
+                                <Badge variant="outline" className="text-xs bg-gray-50">
+                                  {new Date(event.createdAt).toLocaleDateString()}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-gray-600 mb-2">{event.description}</p>
+                              {event.createdBy && (
+                                <p className="text-xs text-gray-500">
+                                  by {event.createdBy.firstName} {event.createdBy.lastName}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-8">
+                          <Activity className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                          <p className="text-sm text-gray-500">No timeline events available</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Notes Section */}
+                  {selectedProfile.notes && (
+                    <div className="bg-orange-50 rounded-xl p-6 shadow-sm border border-orange-100">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
+                          <FileText className="h-5 w-5 text-orange-600" />
+                        </div>
+                        <h2 className="text-xl font-bold text-gray-900">Notes & Comments</h2>
+                      </div>
+                      <div className="bg-white rounded-lg p-4 shadow-sm">
+                        <p className="text-gray-700 leading-relaxed">{selectedProfile.notes}</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>

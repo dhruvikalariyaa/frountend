@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Edit } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Candidate } from '@/types/models';
+import DepartmentDropdown from '@/components/employees/DepartmentDropdown';
 
 // Separate trigger button component
 interface AddCandidateButtonProps {
@@ -168,9 +169,10 @@ export function AddCandidateDialog({
     setForm((prev) => ({ ...prev, status: value }));
   };
 
-  const handleDepartmentChange = (value: string) => {
-    // Convert "not-specified" to empty string for form handling
-    const departmentValue = value === "not-specified" ? "" : value;
+  const handleDepartmentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    // Convert "All" to empty string for form handling
+    const departmentValue = value === "All" ? "" : value;
     setForm((prev) => ({ ...prev, department: departmentValue }));
   };
 
@@ -340,22 +342,11 @@ export function AddCandidateDialog({
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Department</label>
-                <Select value={form.department || "not-specified"} onValueChange={handleDepartmentChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select Department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="not-specified">Not Specified</SelectItem>
-                    <SelectItem value="Engineering">Engineering</SelectItem>
-                    <SelectItem value="Product">Product</SelectItem>
-                    <SelectItem value="Design">Design</SelectItem>
-                    <SelectItem value="Sales">Sales</SelectItem>
-                    <SelectItem value="Marketing">Marketing</SelectItem>
-                    <SelectItem value="HR">HR</SelectItem>
-                    <SelectItem value="Finance">Finance</SelectItem>
-                    <SelectItem value="Operations">Operations</SelectItem>
-                  </SelectContent>
-                </Select>
+                <DepartmentDropdown 
+                  value={form.department || "All"} 
+                  onChange={handleDepartmentChange}
+                  className="h-10 rounded-lg border-gray-200 focus:border-blue-500 focus:ring-blue-500 text-sm"
+                />
               </div>
             </div>
 

@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
-import { mockDepartments, Department } from '@/pages/employees/Departments';
+import { getDepartments, Department } from '@/services/department.service';
 
 interface Job {
   id: number;
@@ -61,6 +61,8 @@ export function AddJobDialog({
     department: 'Engineering',
   });
 
+  const [departments, setDepartments] = useState<Department[]>([]);
+
   useEffect(() => {
     if (initialData) {
       setForm({
@@ -74,6 +76,19 @@ export function AddJobDialog({
       });
     }
   }, [initialData]);
+
+  useEffect(() => {
+    // Fetch departments from API
+    const fetchDepartments = async () => {
+      try {
+        const res = await getDepartments();
+        setDepartments(res.data.data || []);
+      } catch (err) {
+        setDepartments([]);
+      }
+    };
+    fetchDepartments();
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -157,8 +172,8 @@ export function AddJobDialog({
                   <SelectValue placeholder="Select Department" />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockDepartments.map((dept: Department) => (
-                    <SelectItem key={dept.id} value={dept.name}>
+                  {departments.map((dept: Department) => (
+                    <SelectItem key={dept._id || dept.name} value={dept.name}>
                       {dept.name}
                     </SelectItem>
                   ))}

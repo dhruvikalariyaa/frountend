@@ -53,14 +53,18 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { AddEmployeeDialog, EmployeeFormValues } from "@/components/employees/AddEmployeeDialog";
-import { format } from 'date-fns';
+import { format, isValid, parseISO } from 'date-fns';
 import { ViewEmployeeDialog } from "@/components/employees/ViewEmployeeDialog";
-import { employeeService, type Employee, type EmployeeStats, DEPARTMENTS, ROLES, STATUS_OPTIONS } from "@/services/employee.service";
+import { getEmployees, getEmployeeById, createEmployee, updateEmployee, deleteEmployee, getDepartments, getRoles, type Employee, type EmployeeStats, DEPARTMENTS, ROLES, STATUS_OPTIONS } from "@/services/employee.service";
+import { PermissionGuard } from "@/components/PermissionGuard";
+import { PERMISSIONS } from "@/contexts/AuthContext";
+import DepartmentDropdown from '@/components/employees/DepartmentDropdown';
+import RoleDropdown from '@/components/employees/RoleDropdown';
 
 export default function Employees() {
   // State management
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [stats, setStats] = useState<EmployeeStats | null>(null);
+  const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("All");
@@ -77,28 +81,41 @@ export default function Employees() {
   const [editingEmployeeForm, setEditingEmployeeForm] = useState<EmployeeFormValues | undefined>(undefined);
   const [totalEmployees, setTotalEmployees] = useState(0);
 
-  // Fetch initial data
+  // Helper function to map backend data to frontend format
+  const mapBackendDataToFrontend = (employeesData: any[]): Employee[] => {
+    return employeesData.map((emp: any) => {
+      const mapped = {
+        ...emp,
+        name:
+          emp.name && emp.name.trim() !== ""
+            ? emp.name
+            : (emp.firstName && emp.lastName
+                ? `${emp.firstName} ${emp.lastName}`
+                : emp.firstName || emp.lastName || "N/A"),
+        department:
+          typeof emp.department === "object"
+            ? emp.department.name || emp.department.title || "N/A"
+            : emp.department || "N/A",
+        role:
+          typeof emp.role === "object"
+            ? emp.role.name || emp.role.title || "N/A"
+            : emp.role || "N/A",
+        joinDate: emp.joiningDate || emp.joinDate || "",
+        status: emp.status || "Active",
+        email: emp.email || "N/A",
+      };
+      return mapped;
+    });
+  };
+
+  // Fetch initial data only once
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [employeesData, statsData] = await Promise.all([
-          employeeService.getEmployees({
-            page: currentPage,
-            pageSize,
-            sortBy: sortConfig.key,
-            sortDirection: sortConfig.direction,
-            search: searchTerm || undefined,
-            department: selectedDepartment,
-            role: selectedRole,
-            status: selectedStatus
-          }),
-          employeeService.getEmployeeStats()
-        ]);
-
-        setEmployees(employeesData);
-        setStats(statsData);
-        setTotalEmployees(statsData.totalEmployees);
+        const employeesData = await getEmployees();
+        const mappedEmployees: Employee[] = mapBackendDataToFrontend(employeesData);
+        setAllEmployees(mappedEmployees);
         setLoading(false);
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -106,13 +123,62 @@ export default function Employees() {
           title: "Error",
           description: "Failed to fetch data",
           variant: "destructive",
+          duration: 1000,
         });
         setLoading(false);
       }
     };
-
     fetchData();
-  }, [currentPage, pageSize, sortConfig, searchTerm, selectedDepartment, selectedRole, selectedStatus]);
+  }, []);
+
+  // Filter and sort data in memory
+  useEffect(() => {
+    let filteredEmployees = allEmployees.filter((emp: Employee) => {
+      const matchesSearch =
+        !searchTerm ||
+        (emp.user?.firstName && typeof emp.user.firstName === 'string' && emp.user.firstName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (emp.user?.email && typeof emp.user.email === 'string' && emp.user.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (emp.user?.roles && Array.isArray(emp.user.roles) && emp.user.roles.join(', ').toLowerCase().includes(searchTerm.toLowerCase()));
+
+      // Department filter: compare to department name
+      const employeeDepartmentName = typeof emp.department === "object" 
+        ? emp.department?.name 
+        : emp.department;
+      
+      const matchesDepartment =
+        selectedDepartment === "All" ||
+        (employeeDepartmentName && employeeDepartmentName === selectedDepartment);
+
+      const matchesRole =
+        selectedRole === "All" ||
+        (typeof emp.role === "object" 
+          ? emp.role?.name === selectedRole
+          : emp.role === selectedRole);
+
+      const matchesStatus = selectedStatus === "All" || emp.status === selectedStatus;
+
+      return matchesSearch && matchesDepartment && matchesRole && matchesStatus;
+    });
+
+    // Sort data
+    filteredEmployees.sort((a: Employee, b: Employee) => {
+      const aValue = a[sortConfig.key as keyof Employee] || '';
+      const bValue = b[sortConfig.key as keyof Employee] || '';
+      if (sortConfig.direction === "asc") {
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+      } else {
+        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+      }
+    });
+
+    // Pagination
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const paginatedEmployees = filteredEmployees.slice(startIndex, endIndex);
+
+    setEmployees(paginatedEmployees);
+    setTotalEmployees(filteredEmployees.length);
+  }, [allEmployees, searchTerm, selectedDepartment, selectedRole, selectedStatus, sortConfig, currentPage, pageSize]);
 
   // Handle sort
   const handleSort = (key: string) => {
@@ -125,7 +191,7 @@ export default function Employees() {
   // Actions handlers
   const handleView = async (employee: Employee) => {
     try {
-      const employeeDetails = await employeeService.getEmployeeById(employee.id);
+      const employeeDetails = await getEmployeeById(employee.id);
       if (employeeDetails) {
         setViewingEmployee(employeeDetails);
         setIsViewDialogOpen(true);
@@ -135,33 +201,50 @@ export default function Employees() {
         title: "Error",
         description: "Failed to fetch employee details",
         variant: "destructive",
+        duration: 1000,
       });
     }
   };
 
   const handleEdit = async (employee: Employee) => {
     try {
-      const employeeDetails = await employeeService.getEmployeeById(employee.id);
+      const employeeDetails = await getEmployeeById(employee.id);
       if (employeeDetails) {
         // Convert employee data to form values format
+        const nameParts = employeeDetails.name ? employeeDetails.name.split(' ') : [employeeDetails.firstName || '', employeeDetails.lastName || ''];
         const formValues: EmployeeFormValues = {
-          firstName: employeeDetails.name.split(' ')[0],
-          lastName: employeeDetails.name.split(' ')[1] || '',
-          email: employeeDetails.email,
-          phone: employeeDetails.phone || '',
-          position: employeeDetails.role,
-          department: employeeDetails.department.toLowerCase(),
-          role: employeeDetails.role.toLowerCase(),
+          firstName: employeeDetails.user?.firstName || employeeDetails.firstName || nameParts[0] || '',
+          lastName: employeeDetails.user?.lastName || employeeDetails.lastName || nameParts.slice(1).join(' ') || '',
+          email: employeeDetails.user?.email || employeeDetails.email || '',
+          phone: employeeDetails.user?.phone || employeeDetails.phone || '',
+          department: typeof employeeDetails.department === 'object'
+            ? (employeeDetails.department.name || employeeDetails.department.title || '')
+            : (employeeDetails.department || ''),
+          roles: Array.isArray(employeeDetails.user?.roles) && employeeDetails.user.roles.length > 0
+            ? employeeDetails.user.roles.map((role: any) => typeof role === 'object' ? role.name : role)
+            : (typeof employeeDetails.role === 'object' ? [employeeDetails.role.name || employeeDetails.role.title || ''] : [employeeDetails.role || '']),
           employeeId: employeeDetails.employeeId || '',
-          joiningDate: new Date(employeeDetails.joinDate),
+          joiningDate: new Date(employeeDetails.joinDate || employeeDetails.joiningDate),
           salary: employeeDetails.salary || 0,
-          address: employeeDetails.address || '',
-          emergencyContact: employeeDetails.emergencyContact || '',
+          address: typeof employeeDetails.address === 'object' && employeeDetails.address !== null
+            ? {
+                street: employeeDetails.address.street || '',
+                city: employeeDetails.address.city || '',
+                state: employeeDetails.address.state || '',
+                country: employeeDetails.address.country || '',
+                postalCode: employeeDetails.address.postalCode || ''
+              }
+            : { street: '', city: '', state: '', country: '', postalCode: '' },
+          emergencyContact: typeof employeeDetails.emergencyContact === 'object' && employeeDetails.emergencyContact !== null
+            ? employeeDetails.emergencyContact.phone || ''
+            : employeeDetails.emergencyContact || '',
           bankDetails: employeeDetails.bankDetails || {
             accountNumber: '',
             bankName: '',
             ifscCode: '',
           },
+          password: '', // Add default password for edit form
+          departmentId: '', // Add default departmentId
         };
         setEditingEmployee(employeeDetails);
         setEditingEmployeeForm(formValues);
@@ -172,56 +255,51 @@ export default function Employees() {
         title: "Error",
         description: "Failed to fetch employee details",
         variant: "destructive",
+        duration: 1000,
       });
     }
   };
 
   const handleDelete = async (employee: Employee) => {
     try {
-      await employeeService.deleteEmployee(employee.id);
+      await deleteEmployee(employee.id);
       toast({
         title: "Success",
         description: `${employee.name} has been deleted`,
+        duration: 1000,
       });
       // Refresh data
-      const employeesData = await employeeService.getEmployees({
-        page: currentPage,
-        pageSize
-      });
-      setEmployees(employeesData);
-      const statsData = await employeeService.getEmployeeStats();
-      setStats(statsData);
+      const employeesData = await getEmployees();
+      const mappedEmployees: Employee[] = mapBackendDataToFrontend(employeesData);
+      setAllEmployees(mappedEmployees);
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to delete employee",
         variant: "destructive",
+        duration: 1000,
       });
     }
   };
 
-  // Refresh data handler
+  // Refresh data handler (manual refresh)
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const [employeesData, statsData] = await Promise.all([
-        employeeService.getEmployees({
-          page: currentPage,
-          pageSize
-        }),
-        employeeService.getEmployeeStats()
-      ]);
-      setEmployees(employeesData);
-      setStats(statsData);
+      const employeesData = await getEmployees();
+      const mappedEmployees: Employee[] = mapBackendDataToFrontend(employeesData);
+      setAllEmployees(mappedEmployees);
       toast({
         title: "Refreshed",
         description: "Employee data has been refreshed",
+        duration: 1000,
       });
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to refresh data",
         variant: "destructive",
+        duration: 1000,
       });
     } finally {
       setIsRefreshing(false);
@@ -231,17 +309,33 @@ export default function Employees() {
   // Export to CSV
   const handleExport = async () => {
     try {
-      const data = await employeeService.exportEmployees({
-        department: selectedDepartment,
-        role: selectedRole,
-        status: selectedStatus,
-        search: searchTerm
+      const data = await getEmployees();
+
+      // Map backend data to frontend display format
+      const mappedEmployees: Employee[] = mapBackendDataToFrontend(data);
+
+      // Filter data for export
+      const filteredData = mappedEmployees.filter((emp: Employee) => {
+        const matchesSearch = !searchTerm || 
+          emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (typeof emp.role === 'string' ? emp.role.toLowerCase().includes(searchTerm.toLowerCase()) : '');
+        
+        const employeeDepartmentName = typeof emp.department === "object" 
+          ? emp.department?.name 
+          : emp.department;
+        
+        const matchesDepartment = selectedDepartment === "All" || (employeeDepartmentName && employeeDepartmentName === selectedDepartment);
+        const matchesRole = selectedRole === "All" || emp.role === selectedRole;
+        const matchesStatus = selectedStatus === "All" || emp.status === selectedStatus;
+        
+        return matchesSearch && matchesDepartment && matchesRole && matchesStatus;
       });
 
       const headers = ['Name', 'Email', 'Department', 'Role', 'Status', 'Join Date'];
       const csvContent = [
         headers.join(','),
-        ...data.map(emp => 
+        ...filteredData.map((emp: Employee) => 
           [emp.name, emp.email, emp.department, emp.role, emp.status, emp.joinDate].join(',')
         )
       ].join('\n');
@@ -257,54 +351,42 @@ export default function Employees() {
       toast({
         title: "Success",
         description: "Employee data has been exported",
+        duration: 1000,
       });
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to export data",
         variant: "destructive",
+        duration: 1000,
       });
     }
+  };
+
+  // Simple refresh for add employee dialog
+  const handleAddEmployeeRefresh = async () => {
+    const employeesData = await getEmployees();
+    const mappedEmployees: Employee[] = mapBackendDataToFrontend(employeesData);
+    setAllEmployees(mappedEmployees);
   };
 
   // Handle add employee
   const handleAddEmployee = async (data: EmployeeFormValues) => {
     try {
-      const bankDetails = data.bankDetails && Object.values(data.bankDetails).some(val => val)
-        ? data.bankDetails
-        : undefined;
-
-      const newEmployee = {
-        name: `${data.firstName} ${data.lastName}`,
-        email: data.email,
-        department: data.department.charAt(0).toUpperCase() + data.department.slice(1),
-        role: data.role.charAt(0).toUpperCase() + data.role.slice(1),
-        status: 'Active',
-        joinDate: format(data.joiningDate, 'yyyy-MM-dd'),
-        phone: data.phone || undefined,
-        address: data.address || undefined,
-        salary: data.salary || undefined,
-        employeeId: data.employeeId || undefined,
-        emergencyContact: data.emergencyContact || undefined,
-        bankDetails
-      };
-
-      await employeeService.addEmployee(newEmployee);
+      await createEmployee(data);
       
       // Refresh data
-      const [employeesData, statsData] = await Promise.all([
-        employeeService.getEmployees({
-          page: currentPage,
-          pageSize
-        }),
-        employeeService.getEmployeeStats()
-      ]);
-      setEmployees(employeesData);
-      setStats(statsData);
+      const employeesData = await getEmployees();
+      
+      // Map backend data to frontend display format
+      const mappedEmployees: Employee[] = mapBackendDataToFrontend(employeesData);
+      
+      setAllEmployees(mappedEmployees);
 
       toast({
         title: "Success",
         description: "Employee added successfully",
+        duration: 1000,
       });
     } catch (error) {
       console.error('Error adding employee:', error);
@@ -312,6 +394,7 @@ export default function Employees() {
         title: "Error",
         description: "Failed to add employee",
         variant: "destructive",
+        duration: 1000,
       });
     }
   };
@@ -321,43 +404,27 @@ export default function Employees() {
     if (!editingEmployee) return;
 
     try {
-      const bankDetails = data.bankDetails && Object.values(data.bankDetails).some(val => val)
-        ? data.bankDetails
-        : undefined;
-
-      const updatedEmployee = {
-        name: `${data.firstName} ${data.lastName}`,
-        email: data.email,
-        department: data.department.charAt(0).toUpperCase() + data.department.slice(1),
-        role: data.role.charAt(0).toUpperCase() + data.role.slice(1),
-        status: editingEmployee.status,
-        joinDate: format(data.joiningDate, 'yyyy-MM-dd'),
-        phone: data.phone || undefined,
-        address: data.address || undefined,
-        salary: data.salary || undefined,
-        employeeId: data.employeeId || undefined,
-        emergencyContact: data.emergencyContact || undefined,
-        bankDetails
-      };
-
-      await employeeService.updateEmployee(editingEmployee.id, updatedEmployee);
+      await updateEmployee(editingEmployee.id, data);
       
       // Refresh data
-      const employeesData = await employeeService.getEmployees({
-        page: currentPage,
-        pageSize
-      });
-      setEmployees(employeesData);
+      const employeesData = await getEmployees();
+      
+      // Map backend data to frontend display format
+      const mappedEmployees: Employee[] = mapBackendDataToFrontend(employeesData);
+      
+      setAllEmployees(mappedEmployees);
 
       toast({
         title: "Success",
         description: "Employee updated successfully",
+        duration: 1000,
       });
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to update employee",
         variant: "destructive",
+        duration: 1000,
       });
     }
   };
@@ -373,15 +440,17 @@ export default function Employees() {
             <h1 className="text-3xl font-bold tracking-tight">Employee Management</h1>
           </div>
           <div className="flex items-center space-x-4">
-            <AddEmployeeDialog 
-              mode="add"
-              onEmployeeAdd={handleAddEmployee}
-            />
+            <PermissionGuard requiredPermission={PERMISSIONS.EMPLOYEES_CREATE}>
+              <AddEmployeeDialog 
+                mode="add"
+                onRefresh={handleAddEmployeeRefresh}
+              />
+            </PermissionGuard>
           </div>
         </div>
 
         {/* Stats Cards */}
-        {stats && (
+        {employees.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             <Card className="hover:shadow-md transition-shadow">
               <CardContent className="p-4 sm:p-6">
@@ -391,7 +460,7 @@ export default function Employees() {
                   </div>
                   <div>
                     <div className="text-xs sm:text-sm font-medium text-muted-foreground">Total Employees</div>
-                    <div className="text-xl sm:text-2xl font-bold">{stats.totalEmployees}</div>
+                    <div className="text-xl sm:text-2xl font-bold">{employees.length}</div>
                   </div>
                 </div>
               </CardContent>
@@ -404,7 +473,7 @@ export default function Employees() {
                   </div>
                   <div>
                     <div className="text-xs sm:text-sm font-medium text-muted-foreground">Active Employees</div>
-                    <div className="text-xl sm:text-2xl font-bold">{stats.activeEmployees}</div>
+                    <div className="text-xl sm:text-2xl font-bold">{employees.filter(e => e.status === "Active").length}</div>
                   </div>
                 </div>
               </CardContent>
@@ -417,7 +486,7 @@ export default function Employees() {
                   </div>
                   <div>
                     <div className="text-xs sm:text-sm font-medium text-muted-foreground">Departments</div>
-                    <div className="text-xl sm:text-2xl font-bold">{stats.departments}</div>
+                    <div className="text-xl sm:text-2xl font-bold">{employees.map(e => e.department).filter((v, i, a) => a.indexOf(v) === i).length}</div>
                   </div>
                 </div>
               </CardContent>
@@ -441,32 +510,8 @@ export default function Employees() {
                 />
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               </div>
-              <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-                <SelectTrigger className="h-10 rounded-lg border-gray-200 focus:border-blue-500 focus:ring-blue-500 text-sm w-full md:w-48 bg-white">
-                  <SelectValue placeholder="Department" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All">All Departments</SelectItem>
-                  {DEPARTMENTS.map((dept) => (
-                    <SelectItem key={dept} value={dept}>
-                      {dept}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={selectedRole} onValueChange={setSelectedRole}>
-                <SelectTrigger className="h-10 rounded-lg border-gray-200 focus:border-blue-500 focus:ring-blue-500 text-sm w-full md:w-48 bg-white">
-                  <SelectValue placeholder="Role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All">All Roles</SelectItem>
-                  {ROLES.map((role) => (
-                    <SelectItem key={role} value={role}>
-                      {role}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <DepartmentDropdown value={selectedDepartment} onChange={e => setSelectedDepartment(e.target.value)} />
+              <RoleDropdown value={selectedRole} onChange={e => setSelectedRole(e.target.value)} />
               <Select value={selectedStatus} onValueChange={setSelectedStatus}>
                 <SelectTrigger className="h-10 rounded-lg border-gray-200 focus:border-blue-500 focus:ring-blue-500 text-sm w-full md:w-36 bg-white">
                   <SelectValue placeholder="Status" />
@@ -588,14 +633,34 @@ export default function Employees() {
                   ) : (
                     employees.map((employee) => (
                       <TableRow key={employee.id}>
-                        <TableCell className="font-medium">{employee.name}</TableCell>
-                        <TableCell>{employee.email}</TableCell>
+                        <TableCell className="font-medium">{employee.user?.firstName || "Not provided"}</TableCell>
+                        <TableCell>{employee.user?.email || "Not provided"}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                            {employee.department}
+                            {typeof employee.department === 'object' ? employee.department?.name : employee.department || ''}
                           </Badge>
                         </TableCell>
-                        <TableCell>{employee.role}</TableCell>
+                        <TableCell>
+                          {/* Fix role display - check multiple possible sources */}
+                          {(() => {
+                            // First check if user.roles exists and is an array
+                            if (employee.user?.roles && Array.isArray(employee.user.roles)) {
+                              if (employee.user.roles.length > 0) {
+                                return employee.user.roles.map((role: any) => 
+                                  typeof role === 'object' ? (role.name || role) : role
+                                ).join(', ');
+                              }
+                            }
+                            // Then check the mapped role field
+                            if (employee.role) {
+                              return typeof employee.role === 'object' 
+                                ? (employee.role.name || 'Not provided')
+                                : employee.role;
+                            }
+                            // Default fallback
+                            return 'Not provided';
+                          })()}
+                        </TableCell>
                         <TableCell>
                           <Badge 
                             variant="outline" 
@@ -604,18 +669,18 @@ export default function Employees() {
                                 ? "bg-green-50 text-green-700" 
                                 : employee.status === "Inactive"
                                 ? "bg-red-50 text-red-700"
-                                : "bg-yellow-50 text-yellow-700"
+                                : employee.status === "On Leave"
+                                ? "bg-yellow-50 text-yellow-700"
+                                : "bg-gray-50 text-gray-700"
                             }`}
                           >
-                            {employee.status}
+                            {employee.status || 'Active'}
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {new Date(employee.joinDate).toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric'
-                          })}
+                          {employee.joinDate && isValid(parseISO(employee.joinDate))
+                            ? format(parseISO(employee.joinDate), 'PPP')
+                            : ''}
                         </TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
