@@ -28,7 +28,7 @@ export const COMPONENT_PERMISSIONS = {
   // Settings Components
   CompanyProfile: 'settings.companyprofile.view',
   CompanyProfileForm: 'settings.companyprofile.edit',
-  RolesPermissions: 'settings.rolespermisions.view',
+  RolesPermissions: 'settings.role.view',
   SystemSettings: 'settings.systemsettings.view',
   SystemSettingsForm: 'settings.systemsettings.edit',
 } as const; 

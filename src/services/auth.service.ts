@@ -7,9 +7,8 @@ interface LoginCredentials {
 }
 
 interface RefreshTokenResponse {
-  token?: string;
-  refreshToken?: string;
-  accessToken?: string; // Alternative format that some backends use
+  token: string;
+  refreshToken: string;
 }
 
 interface UserData {
@@ -68,60 +67,17 @@ export const authService = {
 
   refreshToken: async (): Promise<RefreshTokenResponse> => {
     const refreshToken = localStorage.getItem('refreshToken');
-    console.log('Attempting token refresh with token:', refreshToken ? 'Present' : 'Missing');
-    
     if (!refreshToken) {
-      console.error('No refresh token found in localStorage');
       throw new Error('No refresh token available');
     }
-
-    try {
-      console.log('Making refresh token request...');
     const response = await axiosInstance.post<RefreshTokenResponse>('/auth/refresh', {
       refreshToken
     });
-      
-      console.log('Refresh token response:', response.status, response.data);
-      
-      // Handle different possible response structures
-      const responseData = response.data;
-      let newAccessToken = '';
-      let newRefreshToken = '';
-      
-      // Check for different response formats
-      if (responseData.token) {
-        newAccessToken = responseData.token;
-        newRefreshToken = responseData.refreshToken || refreshToken; // Use new refresh token or keep old one
-      } else if (responseData.accessToken) {
-        newAccessToken = responseData.accessToken;
-        newRefreshToken = responseData.refreshToken || refreshToken;
-      } else {
-        console.error('Invalid refresh token response structure:', responseData);
-        throw new Error('Invalid response structure from refresh endpoint');
-      }
-      
-      console.log('Storing new tokens...');
-      localStorage.setItem('accessToken', newAccessToken);
-      localStorage.setItem('refreshToken', newRefreshToken);
-      
-      return {
-        token: newAccessToken,
-        refreshToken: newRefreshToken
-      };
-    } catch (error: any) {
-      console.error('Refresh token failed:', {
-        message: error.message,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data
-      });
-      
-      // Clear tokens on refresh failure
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      
-      throw error;
+    if (response.data.token) {
+      localStorage.setItem('accessToken', response.data.token);
+      localStorage.setItem('refreshToken', response.data.refreshToken);
     }
+    return response.data;
   },
 
   logout: () => {
@@ -134,58 +90,13 @@ export const authService = {
     return token ? true : false;
   },
 
-  // Check if token is expired
-  isTokenExpired: (token?: string): boolean => {
-    const accessToken = token || localStorage.getItem('accessToken');
-    if (!accessToken) return true;
-    
+  getUsers: async () => {
     try {
-      const payload = JSON.parse(atob(accessToken.split('.')[1]));
-      const currentTime = Math.floor(Date.now() / 1000);
-      return payload.exp < currentTime;
+      const response = await axiosInstance.get('/users');
+      return response;
     } catch (error) {
-      console.error('Error parsing token:', error);
-      return true;
+      console.error('Failed to fetch users:', error);
+      throw error;
     }
-  },
-
-  // Get token expiration time
-  getTokenExpiration: (token?: string): number | null => {
-    const accessToken = token || localStorage.getItem('accessToken');
-    if (!accessToken) return null;
-    
-    try {
-      const payload = JSON.parse(atob(accessToken.split('.')[1]));
-      return payload.exp * 1000; // Convert to milliseconds
-    } catch (error) {
-      console.error('Error parsing token:', error);
-      return null;
-    }
-  },
-
-  // Validate current session
-  validateSession: async (): Promise<boolean> => {
-    const accessToken = localStorage.getItem('accessToken');
-    const refreshToken = localStorage.getItem('refreshToken');
-    
-    if (!accessToken || !refreshToken) {
-      console.log('No tokens found, session invalid');
-      return false;
-    }
-    
-    // Check if access token is expired
-    if (authService.isTokenExpired(accessToken)) {
-      console.log('Access token expired, attempting refresh...');
-      try {
-        await authService.refreshToken();
-        console.log('Token refresh successful');
-        return true;
-      } catch (error) {
-        console.error('Token refresh failed:', error);
-        return false;
-      }
-    }
-    
-    return true;
   }
 }; 

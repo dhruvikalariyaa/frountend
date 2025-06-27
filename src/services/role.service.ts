@@ -56,9 +56,9 @@ const getPermissionMapping = async (): Promise<PermissionMapping> => {
     // 🔥 PERFORMANCE: Reduce logging in production
     const isDev = process.env.NODE_ENV === 'development';
     if (isDev) {
-    console.log('📋 Permissions API response:', response.data);
-    console.log('📋 Response type:', typeof response.data);
-    console.log('📋 Response keys:', Object.keys(response.data || {}));
+      console.log('📋 Permissions API response:', response.data);
+      console.log('📋 Response type:', typeof response.data);
+      console.log('📋 Response keys:', Object.keys(response.data || {}));
     }
     
     const mapping: PermissionMapping = {};
@@ -78,7 +78,7 @@ const getPermissionMapping = async (): Promise<PermissionMapping> => {
       if (response.data.data && Array.isArray(response.data.data)) {
         console.log('📋 Found permissions data array with', response.data.data.length, 'permissions');
         
-        response.data.data.forEach((permission: any, index: number) => {
+        response.data.data.forEach((permission: any, index: any) => {
           if (isDev && index < 3) { // Only log first 3 in dev mode
             console.log(`📋 Processing permission ${index + 1}:`, permission);
           }
@@ -86,7 +86,7 @@ const getPermissionMapping = async (): Promise<PermissionMapping> => {
           if (permission && typeof permission === 'object') {
             // Handle permission object structure: {_id, name, action, description, ...}
             const permissionId = permission._id || permission.id;
-            const permissionName = permission.name; // e.g., "department.manage", "employees.view"
+            const permissionName = permission.name; // e.g., "candidate.view", "candidate.create"
             
             if (permissionId && permissionName) {
               // Map permission name directly to ID
@@ -95,35 +95,56 @@ const getPermissionMapping = async (): Promise<PermissionMapping> => {
                 console.log(`📝 Mapped: ${permissionName} -> ${permissionId}`);
               }
               
-              // 🔥 ALSO: Create mappings in our expected format
-              // Convert "department.manage" to "employee_management.department.manage"
-              // Convert "employees.view" to "employee_management.employees.view"
+              // Add mapping for candidate permissions to hiring.candidate.*
               const parts = permissionName.split('.');
               if (parts.length === 2) {
                 const [module, action] = parts;
                 let fullPermissionName = '';
-                
-                // Map modules to our frontend structure
-                if (module === 'employees') {
-                  fullPermissionName = `employee_management.employees.${action}`;
-                } else if (module === 'department') {
-                  fullPermissionName = `employee_management.department.${action}`;
-                } else if (module === 'candidate') {
+                if (module === 'candidate') {
                   fullPermissionName = `hiring.candidate.${action}`;
+                  mapping[fullPermissionName] = permissionId;
+                  if (isDev && index < 3) {
+                    console.log(`📝 Also mapped: ${fullPermissionName} -> ${permissionId}`);
+                  }
                 } else if (module === 'job') {
                   fullPermissionName = `hiring.job.${action}`;
+                  mapping[fullPermissionName] = permissionId;
+                  if (isDev && index < 3) {
+                    console.log(`📝 Also mapped: ${fullPermissionName} -> ${permissionId}`);
+                  }
+                } else if (module === 'employees') {
+                  fullPermissionName = `employee_management.employees.${action}`;
+                  mapping[fullPermissionName] = permissionId;
+                  if (isDev && index < 3) {
+                    console.log(`📝 Also mapped: ${fullPermissionName} -> ${permissionId}`);
+                  }
+                } else if (module === 'department') {
+                  fullPermissionName = `employee_management.department.${action}`;
+                  mapping[fullPermissionName] = permissionId;
+                  if (isDev && index < 3) {
+                    console.log(`📝 Also mapped: ${fullPermissionName} -> ${permissionId}`);
+                  }
                 } else if (module === 'user') {
                   fullPermissionName = `settings.user.${action}`;
+                  mapping[fullPermissionName] = permissionId;
+                  if (isDev && index < 3) {
+                    console.log(`📝 Also mapped: ${fullPermissionName} -> ${permissionId}`);
+                  }
                 } else if (module === 'role') {
                   fullPermissionName = `settings.role.${action}`;
+                  mapping[fullPermissionName] = permissionId;
+                  if (isDev && index < 3) {
+                    console.log(`📝 Also mapped: ${fullPermissionName} -> ${permissionId}`);
+                  }
                 } else if (module === 'system') {
                   fullPermissionName = `system.system.${action}`;
+                  mapping[fullPermissionName] = permissionId;
+                  if (isDev && index < 3) {
+                    console.log(`📝 Also mapped: ${fullPermissionName} -> ${permissionId}`);
+                  }
                 } else {
                   // Fallback: try to guess the module group
                   fullPermissionName = `${module}.${module}.${action}`;
-                }
-                
-                if (fullPermissionName) {
                   mapping[fullPermissionName] = permissionId;
                   if (isDev && index < 3) {
                     console.log(`📝 Also mapped: ${fullPermissionName} -> ${permissionId}`);
@@ -147,96 +168,72 @@ const getPermissionMapping = async (): Promise<PermissionMapping> => {
         console.log('⚠️ No data array found in response, trying legacy parsing...');
         
         // Legacy parsing logic for nested structure (keep as fallback)
-      Object.entries(response.data).forEach(([module, moduleData]: [string, any]) => {
+        Object.entries(response.data).forEach(([module, moduleData]: [string, any]) => {
           if (isDev) {
-        console.log(`📋 Processing module: "${module}"`, moduleData);
-        console.log(`📋 Module data type:`, typeof moduleData);
-        console.log(`📋 Module data keys:`, Object.keys(moduleData || {}));
+            console.log(`📋 Processing module: "${module}"`, moduleData);
+            console.log(`📋 Module data type:`, typeof moduleData);
+            console.log(`📋 Module data keys:`, Object.keys(moduleData || {}));
           }
-        
-        if (moduleData && typeof moduleData === 'object') {
-          Object.entries(moduleData).forEach(([submodule, permissions]: [string, any]) => {
+          
+          if (moduleData && typeof moduleData === 'object') {
+            Object.entries(moduleData).forEach(([submodule, permissions]: [string, any]) => {
               if (isDev) {
-            console.log(`📋 Processing submodule: "${module}.${submodule}"`, permissions);
-            console.log(`📋 Submodule data type:`, typeof permissions);
-            console.log(`📋 Is array?:`, Array.isArray(permissions));
+                console.log(`📋 Processing submodule: "${module}.${submodule}"`, permissions);
+                console.log(`📋 Submodule data type:`, typeof permissions);
+                console.log(`📋 Is array?:`, Array.isArray(permissions));
               }
-            
-            if (Array.isArray(permissions)) {
+              
+              if (Array.isArray(permissions)) {
                 if (isDev) console.log(`📋 Processing ${permissions.length} permissions in array`);
-              permissions.forEach((permission: any, index: number) => {
+                permissions.forEach((permission: any, index: number) => {
                   if (isDev && index < 2) {
-                console.log(`📋 Processing permission ${index}:`, permission);
-                console.log(`📋 Permission keys:`, Object.keys(permission || {}));
+                    console.log(`📋 Processing permission ${index}:`, permission);
+                    console.log(`📋 Permission keys:`, Object.keys(permission || {}));
                   }
-                
-                // Handle different permission object structures
-                if (permission.id && permission.action) {
-                  const permissionString = `${module}.${submodule}.${permission.action}`;
-                  mapping[permissionString] = permission.id;
+                  
+                  // Handle different permission object structures
+                  if (permission.id && permission.action) {
+                    const permissionString = `${module}.${submodule}.${permission.action}`;
+                    mapping[permissionString] = permission.id;
                     if (isDev && index < 2) {
-                  console.log(`📝 Mapped: ${permissionString} -> ${permission.id}`);
+                      console.log(`📝 Mapped: ${permissionString} -> ${permission.id}`);
                     }
-                } else if (permission._id && permission.action) {
-                  const permissionString = `${module}.${submodule}.${permission.action}`;
-                  mapping[permissionString] = permission._id;
+                  } else if (permission._id && permission.action) {
+                    const permissionString = `${module}.${submodule}.${permission.action}`;
+                    mapping[permissionString] = permission._id;
                     if (isDev && index < 2) {
-                  console.log(`📝 Mapped: ${permissionString} -> ${permission._id}`);
+                      console.log(`📝 Mapped: ${permissionString} -> ${permission._id}`);
                     }
-                } else if (permission.id && permission.name) {
-                  // Handle alternative naming
-                  const permissionString = `${module}.${submodule}.${permission.name}`;
-                  mapping[permissionString] = permission.id;
+                  } else if (permission.id && permission.name) {
+                    // Handle alternative naming
+                    const permissionString = `${module}.${submodule}.${permission.name}`;
+                    mapping[permissionString] = permission.id;
                     if (isDev && index < 2) {
-                  console.log(`📝 Mapped: ${permissionString} -> ${permission.id}`);
+                      console.log(`📝 Mapped: ${permissionString} -> ${permission.id}`);
                     }
                   } else if (isDev) {
-                  console.log(`⚠️ Permission object doesn't have expected structure:`, permission);
-                  console.log(`⚠️ Expected: {id/_id: string, action/name: string}`);
-                }
-              });
+                    console.log(`⚠️ Permission object doesn't have expected structure:`, permission);
+                    console.log(`⚠️ Expected: {id/_id: string, action/name: string}`);
+                  }
+                });
               } else if (isDev) {
-              console.log(`⚠️ Submodule data is not an array:`, permissions);
-            }
-          });
+                console.log(`⚠️ Submodule data is not an array:`, permissions);
+              }
+            });
           } else if (isDev) {
-          console.log(`⚠️ Module data is not an object:`, moduleData);
-        }
-      });
+            console.log(`⚠️ Module data is not an object:`, moduleData);
+          }
+        });
       }
-    } else {
-      console.log('⚠️ Response data is not an object:', response.data);
     }
     
-    console.log('🎯 Final permission mapping:', Object.keys(mapping).length, 'mappings found');
-    
-    // Log specific permissions we're looking for (only in dev)
-    if (isDev) {
-    const searchPermissions = [
-      'employee_management.employees.view',
-      'employee_management.employees.create',
-      'employee_management.department.manage',
-      'hiring.candidate.view',
-      'settings.user.view',
-      'system.system.admin'
-    ];
-    
-    console.log('🔍 Checking for specific permissions:');
-    searchPermissions.forEach(perm => {
-      if (mapping[perm]) {
-        console.log(`✅ Found: ${perm} -> ${mapping[perm]}`);
-      } else {
-        console.log(`❌ Missing: ${perm}`);
-      }
-    });
-    }
-    
+    // Cache the mapping for future use
     permissionMappingCache = mapping;
-    return mapping;
+    console.log('✅ Permission mapping cache created with', Object.keys(mapping).length, 'entries');
     
-  } catch (error: any) {
+    return mapping;
+  } catch (error) {
     console.error('❌ Failed to fetch permission mappings:', error);
-    console.error('❌ Error details:', error.response?.data);
     throw new Error('Failed to fetch permission mappings from server');
   }
 };
@@ -249,15 +246,49 @@ const convertPermissionStringsToIds = async (permissionStrings: string[]): Promi
     
     console.log('🔄 Converting permission strings to IDs...');
     console.log('📝 Input strings:', permissionStrings);
+    console.log('📋 Available mappings:', Object.keys(mapping));
     
     permissionStrings.forEach(permissionString => {
-      const permissionId = mapping[permissionString];
+      // 🔥 FIX: Try multiple formats for candidate permissions
+      let permissionId = mapping[permissionString];
+      
+      if (!permissionId) {
+        // Try alternative formats
+        const alternatives = [
+          // Try without module prefix
+          permissionString.replace('hiring.candidate.', 'candidate.'),
+          permissionString.replace('employee_management.employees.', 'employees.'),
+          permissionString.replace('employee_management.department.', 'department.'),
+          permissionString.replace('hiring.job.', 'job.'),
+          permissionString.replace('settings.user.', 'user.'),
+          permissionString.replace('settings.role.', 'role.'),
+          permissionString.replace('system.system.', 'system.'),
+        ];
+        
+        for (const alt of alternatives) {
+          if (mapping[alt]) {
+            permissionId = mapping[alt];
+            console.log(`✅ Found alternative mapping: ${permissionString} -> ${alt} -> ${permissionId}`);
+            break;
+          }
+        }
+      }
+      
       if (permissionId) {
         permissionIds.push(permissionId);
         console.log(`✅ Converted: ${permissionString} -> ${permissionId}`);
       } else {
         console.warn(`⚠️ No ID found for permission: ${permissionString}`);
         console.warn(`⚠️ Available permissions:`, Object.keys(mapping));
+        
+        // 🔥 DEBUG: Show similar permissions for debugging
+        const similarPermissions = Object.keys(mapping).filter(key => 
+          key.includes(permissionString.split('.').pop() || '') || 
+          permissionString.includes(key.split('.').pop() || '')
+        );
+        if (similarPermissions.length > 0) {
+          console.warn(`🔍 Similar permissions found:`, similarPermissions);
+        }
       }
     });
     
@@ -276,12 +307,40 @@ const clearPermissionMappingCache = () => {
   permissionMappingCache = null;
 };
 
+// 🔥 NEW: Debug function to check permission mappings
+const debugPermissionMappings = async () => {
+  try {
+    const mapping = await getPermissionMapping();
+    console.log('🔍 DEBUG: Current permission mappings:');
+    console.log('📋 Total mappings:', Object.keys(mapping).length);
+    
+    // Check for candidate permissions specifically
+    const candidatePermissions = Object.keys(mapping).filter(key => key.includes('candidate'));
+    console.log('🎯 Candidate permissions found:', candidatePermissions);
+    
+    // Check for hiring permissions
+    const hiringPermissions = Object.keys(mapping).filter(key => key.includes('hiring'));
+    console.log('🎯 Hiring permissions found:', hiringPermissions);
+    
+    return mapping;
+  } catch (error) {
+    console.error('❌ Debug failed:', error);
+    return {};
+  }
+};
+
 export const roleService = {
+  // 🔥 NEW: Debug function
+  debugPermissions: debugPermissionMappings,
+  
   // Create a new role
   createRole: async (roleData: Partial<Role>) => {
     try {
       console.log('=== roleService.createRole ===');
       console.log('Role data being sent:', JSON.stringify(roleData, null, 2));
+      
+      // 🔥 DEBUG: Check permission mappings first
+      await debugPermissionMappings();
       
       // Transform permissions if needed
       const backendData: any = { ...roleData };
@@ -315,13 +374,17 @@ export const roleService = {
                 if (submodulePerms && typeof submodulePerms === 'object') {
                   Object.entries(submodulePerms).forEach(([action, hasPermission]: [string, any]) => {
                     if (hasPermission === true) {
-                      permissionsArray.push(`${module}.${submodule}.${action}`);
+                      const permissionString = `${module}.${submodule}.${action}`;
+                      permissionsArray.push(permissionString);
+                      console.log(`📝 Added permission: ${permissionString}`);
                     }
                   });
                 }
               });
             }
           });
+          
+          console.log('🎯 All permissions to convert:', permissionsArray);
           
           try {
             const permissionIds = await convertPermissionStringsToIds(permissionsArray);
@@ -369,6 +432,9 @@ export const roleService = {
     console.log('Request method: PATCH');
     console.log('Request body:', roleData);
     
+    // 🔥 DEBUG: Check permission mappings first
+    await debugPermissionMappings();
+    
     // Transform data to backend expected format
     const backendData: any = {};
     
@@ -414,7 +480,9 @@ export const roleService = {
               if (submodulePerms && typeof submodulePerms === 'object') {
                 Object.entries(submodulePerms).forEach(([action, hasPermission]: [string, any]) => {
                   if (hasPermission === true) {
-                    permissionsArray.push(`${module}.${submodule}.${action}`);
+                    const permissionString = `${module}.${submodule}.${action}`;
+                    permissionsArray.push(permissionString);
+                    console.log(`📝 Added permission for update: ${permissionString}`);
                   }
                 });
               }
@@ -438,25 +506,16 @@ export const roleService = {
     // Always include isActive field (default to true)
     backendData.isActive = roleData.isActive !== undefined ? roleData.isActive : true;
     
-    console.log('📤 Final backend data:', JSON.stringify(backendData, null, 2));
+    console.log('📤 Final backend data for update:', JSON.stringify(backendData, null, 2));
     
     try {
       const response = await axiosInstance.patch<Role>(`/roles/${id}`, backendData);
-      console.log('Update role response status:', response.status);
-      console.log('Update role response data:', response.data);
+      console.log('✅ Role update successful:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('roleService.updateRole error:', error);
-      console.error('Error response status:', error.response?.status);
-      console.error('Error response data:', error.response?.data);
-      
-      // Log the exact error message from backend
-      if (error.response?.data) {
-        console.error('🚨 Backend Error Details:');
-        console.error('🚨 Full error data:', JSON.stringify(error.response.data, null, 2));
-        console.error('🚨 Error message:', error.response.data.message);
-      }
-      
+      console.error('❌ Role update failed:', error);
+      console.error('❌ Error response:', error.response?.data);
+      console.error('❌ Error status:', error.response?.status);
       throw error;
     }
   },

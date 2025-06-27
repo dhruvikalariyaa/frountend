@@ -39,17 +39,6 @@ axiosInstance.interceptors.request.use(
   (config) => {
     console.log('Making request to:', config.url, config.method?.toUpperCase());
     const token = localStorage.getItem('accessToken');
-    console.log('Token status:', token ? 'Present' : 'Missing');
-    if (token) {
-      console.log('Token preview:', token.substring(0, 20) + '...');
-    }
-    console.log('Request config:', {
-      url: config.url,
-      method: config.method,
-      params: config.params,
-      data: config.data,
-      hasAuth: !!config.headers.Authorization
-    });
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -73,23 +62,8 @@ axiosInstance.interceptors.response.use(
       statusText: error.response?.statusText,
       url: error.config?.url,
       message: error.message,
-      code: error.code,
-      responseData: error.response?.data,
-      requestData: error.config?.data,
-      requestParams: error.config?.params
+      code: error.code
     });
-    
-    // Special handling for 400 errors
-    if (error.response?.status === 400) {
-      console.error('400 Bad Request Details:', {
-        url: error.config?.url,
-        method: error.config?.method,
-        requestData: error.config?.data,
-        requestParams: error.config?.params,
-        responseMessage: error.response?.data?.message || error.response?.data,
-        headers: error.config?.headers
-      });
-    }
     
     const originalRequest = error.config;
 
@@ -109,38 +83,18 @@ axiosInstance.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        console.log('Attempting to refresh token...');
-        const refreshResponse = await authService.refreshToken();
-        console.log('Token refresh successful:', refreshResponse.token ? 'New token received' : 'No token in response');
-        
-        const newToken = refreshResponse.token || refreshResponse.accessToken;
-        if (!newToken) {
-          throw new Error('No access token received from refresh endpoint');
-        }
-        
-        axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
-        processQueue(null, newToken);
-        
-        // Retry the original request with the new token
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        const { token } = await authService.refreshToken();
+        axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        processQueue(null, token);
         return axiosInstance(originalRequest);
-      } catch (refreshError: any) {
-        console.error('Token refresh failed:', refreshError);
+      } catch (refreshError) {
         processQueue(refreshError, null);
-        
-        // Clear all tokens
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
-        localStorage.removeItem('currentUser');
-        
-        // Call logout to clean up state
         authService.logout();
-        
-        // Redirect to login page
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
-        }
-        
+        // If you have a toast system, show a message here:
+        // toast({ title: 'Session expired', description: 'Please login again.', variant: 'destructive' });
+        // Do NOT reload the page
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

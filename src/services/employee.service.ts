@@ -6,9 +6,10 @@ export interface Employee {
   id: string;
   employeeId?: string;
   user?: {
+    _id?: string;
+    email?: string;
     firstName?: string;
     lastName?: string;
-    email?: string;
     roles?: string[];
   };
   department?: { name?: string } | string;
@@ -106,5 +107,19 @@ export async function getEmployeeByEmployeeId(employeeId: string) {
 export async function getCurrentEmployeeProfile() {
   const response = await axiosInstance.get('/employees/me');
   return response.data;
+}
+
+// Assign a role to a user (new API)
+export async function assignRoleToUser(userId: string, roleId: string) {
+  await axiosInstance.put(`/users/${userId}/roles`, {
+    roles: [roleId],
+  });
+}
+
+// Unassign all roles from a user (new API)
+export async function unassignRoleFromUser(userId: string) {
+  await axiosInstance.put(`/users/${userId}/roles`, {
+    roles: [],
+  });
 } 
 

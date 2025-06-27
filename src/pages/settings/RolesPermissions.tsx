@@ -18,7 +18,6 @@ import {
   Plus,
   Pencil,
   Trash2,
-  History,
   UserCheck,
   UserPlus,
   Check,
@@ -49,6 +48,14 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { getEmployees, Employee, assignRoleToUser as apiAssignRoleToUser, unassignRoleFromUser as apiUnassignRoleFromUser } from '@/services/employee.service';
+import { RoleStats, RolesTable } from './components/RolesTable';
+import { CreateRoleForm } from './components/CreateRoleForm';
+
+import { AssignUserDialog } from './components/AssignUserDialog';
+import { EditRoleDialog } from './components/EditRoleDialog';
+import { DeleteRoleDialog } from './components/DeleteRoleDialog';
+import { ViewUsersDialog } from './components/ViewUsersDialog';
 // 🔥 BOOLEAN UTILITY: Helper function to ensure strict boolean values throughout the component
 const toBooleanStrict = (value: any): boolean => {
   // Handle explicit true values
@@ -101,18 +108,7 @@ interface RoleTemplate {
   category: string;
 }
 
-interface RoleHistory {
-  id: string;
-  roleName: string;
-  action: 'created' | 'updated' | 'deleted';
-  changes: {
-    field: string;
-    oldValue: any;
-    newValue: any;
-  }[];
-  timestamp: string;
-  user: string;
-}
+
 
 // Define permission groups based on the backend API structure
 const permissionGroups = {
@@ -185,7 +181,7 @@ const ROLE_TEMPLATES: RoleTemplate[] = [
       },
       settings: {
         user: { view: true, create: false, edit: false, delete: false },
-        role: { view: true, create: false, edit: false, delete: false }
+        role: { view: false, create: false, edit: false, delete: false}
       },
       system: {
         system: { admin: false }
@@ -236,216 +232,6 @@ const ALL_POSSIBLE_PERMISSIONS: UserPermissions = {
   }
 };
 
-// 🚀 PERFORMANCE: Memoized Components for Heavy Renders
-const MemoizedPermissionCheckbox = memo(({ 
-  id, 
-  checked, 
-  onCheckedChange, 
-  label, 
-  disabled = false 
-}: {
-  id: string;
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  label: string;
-  disabled?: boolean;
-}) => {
-  // 🔥 BOOLEAN VALIDATION: Ensure checked is strictly boolean
-  const isCheckedBoolean = checked === true;
-  
-  return (
-    <div className="flex items-center space-x-2">
-      <Checkbox
-        id={id}
-        checked={isCheckedBoolean}
-        onCheckedChange={(checkedValue) => {
-          // 🔥 BOOLEAN CONVERSION: Ensure the callback receives strict boolean
-          const booleanValue = checkedValue === true;
-          onCheckedChange(booleanValue);
-        }}
-        disabled={disabled}
-      />
-      <Label htmlFor={id} className="capitalize text-sm">
-        {label}
-      </Label>
-    </div>
-  );
-});
-
-MemoizedPermissionCheckbox.displayName = 'MemoizedPermissionCheckbox';
-
-// 🚀 PERFORMANCE: Memoized Permission Group Component
-const MemoizedPermissionGroup = memo(({ 
-  groupKey, 
-  group, 
-  permissions, 
-  onPermissionChange, 
-  onSelectAll,
-  areAllSelected,
-  assignedCount,
-  totalCount,
-  isEditing = false
-}: {
-  groupKey: string;
-  group: any;
-  permissions: any;
-  onPermissionChange: (module: string, submodule: string, action: string, checked: boolean) => void;
-  onSelectAll: (module: string, shouldSelect: boolean) => void;
-  areAllSelected: boolean;
-  assignedCount: number;
-  totalCount: number;
-  isEditing?: boolean;
-}) => {
-  return (
-    <AccordionItem value={groupKey} className="border rounded-lg">
-      <AccordionTrigger className="p-4 hover:no-underline">
-        <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-3">
-            <span className="font-semibold">{group.description}</span>
-            <Badge variant="secondary">
-              {assignedCount} / {totalCount} permissions
-            </Badge>
-          </div>
-          <div className="flex items-center gap-2 pr-2">
-            <Checkbox
-              id={`select-all-${isEditing ? 'edit-' : ''}${groupKey}`}
-              checked={areAllSelected === true}
-              onCheckedChange={(checked) => {
-                // 🔥 BOOLEAN CONVERSION: Ensure strict boolean value
-                const booleanValue = checked === true;
-                onSelectAll(groupKey, booleanValue);
-              }}
-            />
-            <Label htmlFor={`select-all-${isEditing ? 'edit-' : ''}${groupKey}`} className="text-sm">
-              Select All
-            </Label>
-          </div>
-        </div>
-      </AccordionTrigger>
-      <AccordionContent className="p-4 pt-0">
-        <div className="space-y-4 pt-4 border-t">
-          {Object.entries(group.modules).map(([moduleKey, moduleName]) => (
-            <Card key={moduleKey}>
-              <CardHeader>
-                <CardTitle className="text-base">{String(moduleName)}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {Object.keys(permissions?.[groupKey]?.[moduleKey] || {}).map((action) => {
-                    const permissionValue = permissions?.[groupKey]?.[moduleKey]?.[action];
-                    // 🔥 BOOLEAN VALIDATION: Ensure strict boolean check
-                    const isChecked = permissionValue === true;
-                    
-                    return (
-                      <MemoizedPermissionCheckbox
-                        key={`${groupKey}-${moduleKey}-${action}`}
-                        id={`${isEditing ? 'edit-' : ''}${groupKey}-${moduleKey}-${action}`}
-                        checked={isChecked}
-                        onCheckedChange={(checked) => {
-                          // 🔥 BOOLEAN CONVERSION: Ensure strict boolean value
-                          const booleanValue = checked === true;
-                          onPermissionChange(groupKey, moduleKey, action, booleanValue);
-                        }}
-                        label={action}
-                      />
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </AccordionContent>
-    </AccordionItem>
-  );
-});
-
-MemoizedPermissionGroup.displayName = 'MemoizedPermissionGroup';
-
-// 🚀 PERFORMANCE: Optimized Stats Card Component
-const MemoizedStatsCard = memo(({ title, value, icon }: { title: string; value: number; icon: React.ReactNode }) => (
-  <Card>
-    <CardContent className="flex items-center justify-between p-6">
-      <div>
-        <p className="text-sm font-medium text-gray-500">{title}</p>
-        <p className="text-3xl font-bold text-gray-800">{value}</p>
-      </div>
-      <div className="p-3 bg-gray-100 rounded-lg">
-        {icon}
-      </div>
-    </CardContent>
-  </Card>
-));
-
-MemoizedStatsCard.displayName = 'MemoizedStatsCard';
-
-// 🚀 PERFORMANCE: Optimized Role Row Component
-const MemoizedRoleRow = memo(({ 
-  role, 
-  userCount, 
-  onEdit, 
-  onDelete, 
-  onAssignUser, 
-  onViewUsers 
-}: {
-  role: Role;
-  userCount: number;
-  onEdit: (role: Role) => void;
-  onDelete: (role: Role) => void;
-  onAssignUser: (role: Role) => void;
-  onViewUsers: (role: Role) => void;
-}) => {
-  const isSystemRole = role.name.toLowerCase() === 'super_admin' || role.name.toLowerCase() === 'super admin';
-  
-  return (
-    <TableRow>
-      <TableCell>
-        <div className="flex flex-col">
-          <Badge variant="outline">{role.name}</Badge>
-          
-        </div>
-      </TableCell>
-      <TableCell>{role.description}</TableCell>
-      <TableCell>
-        <Button variant="link" className="p-0 h-auto" onClick={() => onViewUsers(role)}>
-          {userCount || 0}
-        </Button>
-      </TableCell>
-      <TableCell className="flex gap-2">
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="flex items-center gap-1" 
-          onClick={() => onEdit(role)}
-          disabled={isSystemRole}
-        >
-          <Pencil className="h-3 w-3" /> Edit
-        </Button>
-        <Button 
-          variant="destructive" 
-          size="sm" 
-          className="flex items-center gap-1" 
-          onClick={() => onDelete(role)}
-          disabled={isSystemRole}
-        >
-          <Trash2 className="h-3 w-3" /> Delete
-        </Button>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="flex items-center gap-1"
-          onClick={() => onAssignUser(role)}
-          disabled={isSystemRole}
-        >
-          <UserPlus className="h-3 w-4" /> Add User
-        </Button>
-      </TableCell>
-    </TableRow>
-  );
-});
-
-MemoizedRoleRow.displayName = 'MemoizedRoleRow';
-
 // Custom hooks for better state management
 const useRoleManagement = () => {
   const { 
@@ -459,7 +245,8 @@ const useRoleManagement = () => {
     hasPermission,
     users,
     user,
-    refreshRoles
+    refreshRoles,
+    refreshUsers
   } = useAuth();
   
   const [newRoleName, setNewRoleName] = useState<string>('');
@@ -475,7 +262,7 @@ const useRoleManagement = () => {
   const [viewUsersRole, setViewUsersRole] = useState<Role | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [selectedTemplate, setSelectedTemplate] = useState<RoleTemplate | null>(null);
-  const [roleHistory, setRoleHistory] = useState<RoleHistory[]>([]);
+
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
@@ -609,7 +396,8 @@ const useRoleManagement = () => {
       // This is actually the fix for the uncheck/disable issue!
       
       // 🔥 FIX: Get the role details to send complete data
-      const currentRole = roles.find(r => r.id === roleId || r._id === roleId);
+      const rolesArray = Array.isArray(roles) ? roles : [];
+      const currentRole = rolesArray.find(r => r.id === roleId || r._id === roleId);
       
       // 🔥 FIX: Send complete role data in backend expected format
       const roleUpdateData = {
@@ -661,14 +449,101 @@ const useRoleManagement = () => {
 
   const userCountsByRole = useMemo(() => {
     const counts: { [roleName: string]: number } = {};
-    roles.forEach(role => {
+    
+    // Defensive: Ensure roles is an array
+    const rolesArray = Array.isArray(roles) ? roles : [];
+    rolesArray.forEach(role => {
       counts[role.name] = 0;
     });
-    users.forEach(user => {
-      if (user.role && counts[user.role] !== undefined) {
-        counts[user.role]++;
+    
+    // Defensive: Ensure users is an array
+    const usersArray = Array.isArray(users) ? users : [];
+    
+    // Debug logging to see the actual data structure
+    console.log('🔍 userCountsByRole calculation:', {
+      rolesArray: rolesArray.map(r => ({ name: r.name, id: r.id, _id: r._id })),
+      usersArray: usersArray.map(u => ({ 
+        id: u.id, 
+        name: u.name, 
+        email: u.email, 
+        role: u.role,
+        roles: u.roles
+      })),
+      initialCounts: counts
+    });
+    
+    usersArray.forEach(user => {
+      if (user) {
+        let userAssignedToRole = false;
+        
+        // 🔥 IMPROVED: Check roles array first (most reliable)
+        if (user.roles && Array.isArray(user.roles) && user.roles.length > 0) {
+          user.roles.forEach(userRole => {
+            // Handle both string and object role formats
+            let roleName = '';
+            if (typeof userRole === 'string') {
+              roleName = userRole;
+            } else if (typeof userRole === 'object' && userRole) {
+              roleName = userRole.name || userRole._id || userRole.id || '';
+            }
+            
+            // Check if this role name exists in our counts
+            if (roleName && counts[roleName] !== undefined) {
+              counts[roleName]++;
+              userAssignedToRole = true;
+              console.log(`✅ User ${user.name || user.email} assigned to role ${roleName} (from roles array)`);
+            } else if (roleName) {
+              // Try to find role by ID matching
+              const matchingRole = rolesArray.find(r => 
+                r.id === roleName || r._id === roleName || r.name === roleName
+              );
+              if (matchingRole && counts[matchingRole.name] !== undefined) {
+                counts[matchingRole.name]++;
+                userAssignedToRole = true;
+                console.log(`✅ User ${user.name || user.email} assigned to role ${matchingRole.name} (matched by ID: ${roleName})`);
+              }
+            }
+          });
+        }
+        
+        // 🔥 FALLBACK: Check traditional role field if not assigned via roles array
+        if (!userAssignedToRole && user.role) {
+          let roleName = '';
+          if (typeof user.role === 'string') {
+            roleName = user.role;
+          } else if (typeof user.role === 'object' && user.role) {
+            roleName = user.role.name || user.role._id || user.role.id || '';
+          }
+          
+          if (roleName && counts[roleName] !== undefined) {
+            counts[roleName]++;
+            userAssignedToRole = true;
+            console.log(`✅ User ${user.name || user.email} assigned to role ${roleName} (from role field)`);
+          } else if (roleName) {
+            // Try to find role by ID matching
+            const matchingRole = rolesArray.find(r => 
+              r.id === roleName || r._id === roleName || r.name === roleName
+            );
+            if (matchingRole && counts[matchingRole.name] !== undefined) {
+              counts[matchingRole.name]++;
+              userAssignedToRole = true;
+              console.log(`✅ User ${user.name || user.email} assigned to role ${matchingRole.name} (matched by ID from role field: ${roleName})`);
+            }
+          }
+        }
+        
+        // Log users without valid role assignments
+        if (!userAssignedToRole) {
+          console.log(`⚠️ User ${user?.name || user?.email || 'unknown'} has no valid role assignment:`, {
+            role: user?.role,
+            roles: user?.roles,
+            availableRoles: Object.keys(counts)
+          });
+        }
       }
     });
+    
+    console.log('📊 Final role counts:', counts);
     return counts;
   }, [users, roles]);
 
@@ -684,6 +559,7 @@ const useRoleManagement = () => {
     users,
     user,
     refreshRoles,
+    refreshUsers,
     newRoleName,
     setNewRoleName,
     newRolePermissions,
@@ -706,8 +582,6 @@ const useRoleManagement = () => {
     setIsLoading,
     selectedTemplate,
     setSelectedTemplate,
-    roleHistory,
-    setRoleHistory,
     selectedRoles,
     setSelectedRoles,
     isDeleteDialogOpen,
@@ -785,6 +659,7 @@ export default function RolesPermissions() {
     hasPermission,
     users,
     refreshRoles,
+    refreshUsers,
     newRoleName,
     setNewRoleName,
     newRolePermissions,
@@ -799,8 +674,6 @@ export default function RolesPermissions() {
     setIsDeleteDialogOpen,
     roleToDelete,
     setRoleToDelete,
-    roleHistory,
-    setRoleHistory,
     editingRole,
     setEditingRole,
     isEditModalOpen,
@@ -822,7 +695,6 @@ export default function RolesPermissions() {
     viewUsersRole,
     setViewUsersRole,
     unassignRoleFromUser,
-    // 🔥 NEW: Permissions API state and functions
     allPermissions,
     rolePermissionsCache,
     isLoadingPermissions,
@@ -947,6 +819,15 @@ export default function RolesPermissions() {
 
   // 🔥 ENHANCED: Improved handleEditClick with better error handling and fallbacks
   const handleEditClick = async (role: Role) => {
+    if (!hasPermission('settings.role.edit')) {
+      toast({
+        title: "Access Denied",
+        description: "You don't have permission to edit roles.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     try {
       // Get role ID with multiple fallbacks
       const roleId = role.id || role._id || role.name || '';
@@ -1276,19 +1157,7 @@ export default function RolesPermissions() {
         });
       }
       
-      const newHistoryEntry: RoleHistory = {
-        id: new Date().toISOString(),
-        roleName: editingRoleName,
-        action: 'updated',
-        changes: [
-          { field: 'name', oldValue: editingRole.name, newValue: editingRoleName },
-          { field: 'description', oldValue: editingRole.description || '', newValue: editingRoleDescription },
-          { field: 'permissions', oldValue: 'Previous permissions', newValue: 'New permissions set' }
-        ],
-        timestamp: new Date().toISOString(),
-        user: user?.email || 'System'
-      };
-      setRoleHistory(prev => [newHistoryEntry, ...prev]);
+
 
       setIsEditModalOpen(false);
       setEditingRole(null);
@@ -1304,11 +1173,13 @@ export default function RolesPermissions() {
         variant: "destructive",
       });
     }
-  }, [editingRole, editingRolePermissions, editingRoleName, editingRoleDescription, transformPermissionsToArray, setRoleHistory, user, toast, refreshRoles]);
+  }, [editingRole, editingRolePermissions, editingRoleName, editingRoleDescription, transformPermissionsToArray, user, toast, refreshRoles]);
 
   // Filter roles based on search term
   const filteredRoles = useMemo(() => {
-    return roles.filter((role: Role) =>
+    // Defensive: Ensure roles is an array
+    const rolesArray = Array.isArray(roles) ? roles : [];
+    return rolesArray.filter((role: Role) =>
       role.name.toLowerCase().includes(roleSearchTerm.toLowerCase()) ||
       (role.description && role.description.toLowerCase().includes(roleSearchTerm.toLowerCase()))
     );
@@ -1316,7 +1187,7 @@ export default function RolesPermissions() {
 
   // Handle permission change for new role
   const handleNewRolePermissionChange = useCallback((module: string, submodule: string, action: string, checked: boolean) => {
-    if (!hasPermission('settings.role.manage')) {
+    if (!hasPermission('settings.role.create')) {
       toast({
         title: "Access Denied",
         description: "You don't have permission to create new roles.",
@@ -1424,6 +1295,15 @@ export default function RolesPermissions() {
       return;
     }
 
+    if (!newRoleDescription.trim()) {
+      toast({
+        title: "Error",
+        description: "Role description is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Check if at least one permission is selected with proper typing
     const hasAnyPermission = Object.values(newRolePermissions).some((module: any) => 
       Object.values(module).some((submodule: any) => 
@@ -1451,20 +1331,7 @@ export default function RolesPermissions() {
       // 🔥 NEW: Refresh roles in frontend to show newly created role immediately
       await refreshRoles();
 
-      // Add to history
-      const newHistoryEntry: RoleHistory = {
-        id: new Date().toISOString(),
-          roleName: newRoleName,
-          action: 'created',
-          changes: [
-          { field: 'name', oldValue: '', newValue: newRoleName },
-          { field: 'description', oldValue: '', newValue: newRoleDescription },
-          { field: 'permissions', oldValue: {}, newValue: 'Initial permissions set' },
-          ],
-          timestamp: new Date().toISOString(),
-        user: user?.email || 'System'
-      };
-      setRoleHistory(prev => [newHistoryEntry, ...prev]);
+
 
       // Reset form
       setNewRoleName('');
@@ -1503,13 +1370,21 @@ export default function RolesPermissions() {
         variant: "destructive",
       });
     }
-  }, [newRoleName, newRolePermissions, newRoleDescription, createRoleWithPermissions, toast, setSelectedTemplate, setNewRoleName, setNewRolePermissions, setNewRoleDescription, user, setRoleHistory, refreshRoles]);
+  }, [newRoleName, newRolePermissions, newRoleDescription, createRoleWithPermissions, toast, setSelectedTemplate, setNewRoleName, setNewRolePermissions, setNewRoleDescription, user, refreshRoles]);
 
   // Handle role deletion
   const handleDeleteRole = useCallback(async (role: Role) => {
+    if (!hasPermission('settings.role.delete')) {
+      toast({
+        title: "Access Denied",
+        description: "You don't have permission to delete roles.",
+        variant: "destructive",
+      });
+      return;
+    }
     setRoleToDelete(role);
     setIsDeleteDialogOpen(true);
-  }, [setIsDeleteDialogOpen, setRoleToDelete]);
+  }, [hasPermission, toast, setIsDeleteDialogOpen, setRoleToDelete]);
 
   const confirmDeleteRole = useCallback(async () => {
     if (!roleToDelete) return;
@@ -1520,22 +1395,14 @@ export default function RolesPermissions() {
       // 🔥 NEW: Refresh roles in frontend to remove deleted role immediately
       await refreshRoles();
       
-      const newHistoryEntry: RoleHistory = {
-        id: new Date().toISOString(),
-        roleName: roleToDelete.name,
-            action: 'deleted',
-        changes: [{ field: 'role', oldValue: roleToDelete.name, newValue: '' }],
-            timestamp: new Date().toISOString(),
-        user: user?.email || 'System'
-      };
-      setRoleHistory(prev => [newHistoryEntry, ...prev]);
+
 
       setIsDeleteDialogOpen(false);
       setRoleToDelete(null);
     } catch (error) {
       console.error('Failed to delete role:', error);
     }
-  }, [roleToDelete, deleteRole, setIsDeleteDialogOpen, setRoleToDelete, user, setRoleHistory, refreshRoles]);
+  }, [roleToDelete, deleteRole, setIsDeleteDialogOpen, setRoleToDelete, user, refreshRoles]);
 
   const handleEditRolePermissionChange = useCallback((module: string, submodule: string, action: string, checked: boolean) => {
     if (!editingRole) return;
@@ -1610,53 +1477,107 @@ export default function RolesPermissions() {
   };
 
   const handleAssignUserClick = (role: Role) => {
+    if (!hasPermission('settings.user.edit')) {
+      toast({
+        title: "Access Denied",
+        description: "You don't have permission to assign users to roles.",
+        variant: "destructive",
+      });
+      return;
+    }
     setRoleToAssignUser(role);
     setIsAssignUserDialogOpen(true);
     setUserSearchTerm('');
   };
 
-  const handleAssignRoleToUser = (userId: string) => {
+  const handleAssignRoleToUser = async (userId: string) => {
     if (roleToAssignUser) {
-      // Prevent assigning Super Admin role to users (it's a system role)
-      const systemRoles = ['SUPER_ADMIN', 'Super Admin', 'super_admin'];
-      if (systemRoles.includes(roleToAssignUser.name) || systemRoles.some(role => role.toLowerCase() === roleToAssignUser.name.toLowerCase())) {
+      try {
+        setApiUsersLoading(true);
+        
+        // Use the role ID or _id for assignment
+        const roleIdToAssign = roleToAssignUser.id || roleToAssignUser._id || roleToAssignUser.name;
+        await apiAssignRoleToUser(userId, roleIdToAssign);
+        
         toast({
-          title: "🛡️ System Role Protected",
-          description: `Cannot assign system role "${roleToAssignUser.name}" to users. System roles are protected.`,
+          title: "✅ User Assigned",
+          description: `User has been successfully assigned the "${roleToAssignUser.name}" role.`,
+          duration: 3000,
+        });
+        
+        // Refresh all user data sources to update counts
+        await Promise.all([
+          fetchApiUsers(), // Refresh employee list for assign dialog
+          refreshRoles(), // Refresh roles to update counts
+          refreshUsers() // 🔥 FIX: Also refresh users in AuthContext for count calculation
+        ]);
+        
+        console.log('✅ All user lists refreshed after role assignment');
+      } catch (error) {
+        console.error('❌ Failed to assign role:', error);
+        toast({
+          title: "❌ Assignment Failed",
+          description: "Failed to assign role to user. Please try again.",
           variant: "destructive",
           duration: 5000,
-          className: "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200 text-black",
         });
-        return;
+      } finally {
+        setApiUsersLoading(false);
       }
-
-      assignRoleToUser(userId, roleToAssignUser.name);
-      toast({
-        title: "User Assigned",
-        description: `User has been successfully assigned the "${roleToAssignUser.name}" role.`,
-      });
-      setIsAssignUserDialogOpen(false);
     }
   };
 
   const handleViewUsersClick = (role: Role) => {
+    if (!hasPermission('settings.user.view')) {
+      toast({
+        title: "Access Denied",
+        description: "You don't have permission to view users.",
+        variant: "destructive",
+      });
+      return;
+    }
     setViewUsersRole(role);
   };
 
-  const handleUnassignUser = (userId: string) => {
-    if (viewUsersRole) {
-      unassignRoleFromUser(userId);
+  const handleUnassignUser = async (userId: string) => {
+    try {
+      setApiUsersLoading(true);
+      
+      await apiUnassignRoleFromUser(userId);
+      
       toast({
-        title: "User Unassigned",
-        description: `User has been unassigned from the "${viewUsersRole.name}" role.`,
+        title: "✅ User Unassigned",
+        description: "User has been successfully unassigned from the role.",
+        duration: 3000,
       });
+      
+      // Refresh all user data sources to update counts
+      await Promise.all([
+        fetchApiUsers(), // Refresh employee list for assign dialog
+        refreshRoles(), // Refresh roles to update counts
+        refreshUsers() // 🔥 FIX: Also refresh users in AuthContext for count calculation
+      ]);
+      
+      console.log('✅ All user lists refreshed after role unassignment');
+    } catch (error) {
+      console.error('❌ Failed to unassign role:', error);
+      toast({
+        title: "❌ Unassignment Failed",
+        description: "Failed to unassign role from user. Please try again.",
+        variant: "destructive",
+        duration: 5000,
+      });
+    } finally {
+      setApiUsersLoading(false);
     }
   };
 
   const handleUnassignAllUsers = () => {
     if (viewUsersRole) {
-      users.forEach(u => {
-        if (u.role === viewUsersRole.name) {
+      // Defensive: Ensure users is an array
+      const usersArray = Array.isArray(users) ? users : [];
+      usersArray.forEach(u => {
+        if (u && u.role === viewUsersRole.name) {
           unassignRoleFromUser(u.id);
         }
       });
@@ -1668,13 +1589,54 @@ export default function RolesPermissions() {
     }
   };
 
-      // 🚀 PERFORMANCE: Memoized stats cards data
-  const statCards = useMemo(() => [
-    { title: 'Total Roles', value: roles.length, icon: <Users className="h-6 w-6 text-blue-500" /> },
-    { title: 'Active Users', value: users.length, icon: <UserCheck className="h-6 w-6 text-green-500" /> },
-    { title: 'Permission Groups', value: Object.keys(permissionGroups).length, icon: <Shield className="h-6 w-6 text-purple-500" /> },
-    { title: 'Recent Changes', value: 3, icon: <History className="h-6 w-6 text-orange-500" /> }
-  ], [roles.length, users.length]);
+  // State for API-fetched employees for Assign User dialog
+  const [apiUsers, setApiUsers] = useState<Employee[]>([]);
+  const [apiUsersLoading, setApiUsersLoading] = useState(false);
+  const [apiUsersError, setApiUsersError] = useState<string | null>(null);
+
+  // Fetch users from API when Assign User dialog opens or after assign/unassign
+  const fetchApiUsers = useCallback(() => {
+    console.log('🔄 Fetching API users for assignment dialog...');
+    setApiUsersLoading(true);
+    setApiUsersError(null);
+    getEmployees()
+      .then((data) => {
+        console.log('✅ API users fetched:', data?.length || 0, 'users');
+        console.log('📋 Sample user data:', data?.[0]);
+        setApiUsers(Array.isArray(data) ? data : []);
+        setApiUsersLoading(false);
+      })
+      .catch((err) => {
+        console.error('❌ Failed to fetch API users:', err);
+        setApiUsersError('Failed to load users');
+        setApiUsersLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (isAssignUserDialogOpen) {
+      fetchApiUsers();
+    }
+  }, [isAssignUserDialogOpen, fetchApiUsers]);
+
+  // Wrap assign/unassign to refresh list after action
+  const handleAssignAndRefresh = async (userId: string) => {
+    await handleAssignRoleToUser(userId);
+    // Additional refresh after assignment
+    await Promise.all([
+      fetchApiUsers(),
+      refreshUsers() // 🔥 FIX: Ensure AuthContext users are refreshed
+    ]);
+  };
+  
+  const handleUnassignAndRefresh = async (userId: string) => {
+    await handleUnassignUser(userId);
+    // Additional refresh after unassignment
+    await Promise.all([
+      fetchApiUsers(),
+      refreshUsers() // 🔥 FIX: Ensure AuthContext users are refreshed
+    ]);
+  };
 
   return (
     <PermissionGuard requiredPermission={COMPONENT_PERMISSIONS.RolesPermissions}>
@@ -1683,386 +1645,109 @@ export default function RolesPermissions() {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Roles & Permissions</h1>
             <p className="text-gray-600 mt-2">Manage user roles and their associated permissions</p>
-            </div>
           </div>
-
-        {/* 🚀 PERFORMANCE: Optimized Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {statCards.map(card => (
-            <MemoizedStatsCard key={card.title} {...card} />
-          ))}
           </div>
-
+        <RoleStats rolesCount={Array.isArray(roles) ? roles.length : 0} usersCount={Array.isArray(users) ? users.length : 0} permissionGroupsCount={Object.keys(permissionGroups).length} />
         <Tabs defaultValue="roles" className="w-full">
           <TabsList>
             <TabsTrigger value="roles" className="flex items-center gap-2"><Users className="h-4 w-4" />Roles</TabsTrigger>
-            <TabsTrigger value="create" className="flex items-center gap-2"><Plus className="h-4 w-4" />Create Role</TabsTrigger>
-            <TabsTrigger value="history" className="flex items-center gap-2"><History className="h-4 w-4" />History</TabsTrigger>
+            {hasPermission('settings.role.create') && (
+              <TabsTrigger value="create" className="flex items-center gap-2"><Plus className="h-4 w-4" />Create Role</TabsTrigger>
+            )}
           </TabsList>
-
           <TabsContent value="roles" className="mt-6">
-            <Card>
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <div>
-                    <CardTitle>Existing Roles</CardTitle>
-                    <CardDescription>Manage permissions for existing roles</CardDescription>
-                  </div>
-                  <div className="flex gap-2">
-                    <div className="w-64">
-                    <Input
-                      placeholder="Search roles..."
-                      value={roleSearchTerm}
-                      onChange={(e) => setRoleSearchTerm(e.target.value)}
-                    />
-                    </div>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {filteredRoles.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      {roleSearchTerm ? 'No roles found' : 'No roles available'}
-                    </h3>
-                    <p className="text-gray-500 mb-4">
-                      {roleSearchTerm 
-                        ? `No roles match "${roleSearchTerm}". Try a different search term.`
-                        : 'No roles have been created yet. Create your first role to get started.'
-                      }
-                    </p>
-                    {!roleSearchTerm && (
-                      <Button onClick={() => setRoleSearchTerm('')} className="bg-gray-900 hover:bg-gray-800 mt-4">
-                        <Plus className="mr-2 h-4 w-4" /> Create First Role
-                      </Button>
-                    )}
-                  </div>
-                ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Role Name</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Assigned Users</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredRoles.map((role: Role) => (
-                      <MemoizedRoleRow
-                        key={role.id || role._id}
-                        role={role}
-                        userCount={userCountsByRole[role.name] || 0}
+            <RolesTable
+              roles={roles}
+              userCountsByRole={userCountsByRole}
+              roleSearchTerm={roleSearchTerm}
+              onRoleSearchChange={setRoleSearchTerm}
                         onEdit={handleEditClick}
                         onDelete={handleDeleteRole}
                         onAssignUser={handleAssignUserClick}
                         onViewUsers={handleViewUsersClick}
-                      />
-                    ))}
-                  </TableBody>
-                </Table>
-                )}
-              </CardContent>
-            </Card>
+              onCreateFirstRole={() => setRoleSearchTerm("")}
+            />
           </TabsContent>
-
-          <TabsContent value="create" className="mt-6">
-            <Card>
-              <CardHeader>
-                    <CardTitle className="text-xl font-bold">Create New Role</CardTitle>
-                    <CardDescription>Define a new role and assign its permissions</CardDescription>
-              </CardHeader>
-                <CardContent className="space-y-8">
-                {/* Role Templates */}
-                    <div>
-                        <Label className="text-base font-semibold">Role Templates</Label>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
-                    {ROLE_TEMPLATES.map((template) => (
-                      <Card
-                        key={template.id}
-                                className={`cursor-pointer hover:shadow-lg transition-all border-2 ${selectedTemplate?.id === template.id ? 'border-blue-500' : 'border-transparent'}`}
-                        onClick={() => handleTemplateSelect(template)}
-                      >
-                                <CardContent className="p-4 relative">
-                                    <h3 className="font-semibold">{template.name}</h3>
-                                    <p className="text-sm text-gray-500">{template.description}</p>
-                            {selectedTemplate?.id === template.id && (
-                                        <div className="absolute top-2 right-2 h-5 w-5 bg-blue-500 text-white rounded-full flex items-center justify-center">
-                                            <Check className="h-3 w-3" />
-                          </div>
-                                    )}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-
-                    {/* Role Name */}
-                <div className="space-y-2">
-                      <Label htmlFor="roleName" className="text-base font-semibold">Role Name</Label>
-                  <Input
-                        id="roleName"
-                    value={newRoleName}
-                    onChange={(e) => setNewRoleName(e.target.value)}
-                    placeholder="e.g., Team Lead"
-                  />
-                </div>
-
-                    {/* Role Description */}
-                    <div className="space-y-2">
-                      <Label htmlFor="roleDescription" className="text-base font-semibold">Role Description</Label>
-                      <Input
-                        id="roleDescription"
-                        value={newRoleDescription}
-                        onChange={(e) => setNewRoleDescription(e.target.value)}
-                        placeholder="Enter a description for the role"
-                  />
-                </div>
-
-                    {/* Assign Permissions */}
-                    <div>
-                         <Label className="text-base font-semibold">Assign Permissions</Label>
-                         <Accordion type="multiple" className="w-full mt-2 space-y-3">
-                            {Object.entries(permissionGroups).map(([groupKey, group]) => (
-                                <MemoizedPermissionGroup
-                                  key={groupKey}
-                                  groupKey={groupKey}
-                                  group={group}
-                                  permissions={newRolePermissions}
-                                  onPermissionChange={handleNewRolePermissionChange}
-                                  onSelectAll={handleSelectAllModulePermissions}
-                                  areAllSelected={areAllModulePermissionsSelected(groupKey)}
-                                  assignedCount={countAssignedPermissions((newRolePermissions as any)[groupKey])}
-                                  totalCount={countTotalPermissionsInGroup((newRolePermissions as any)[groupKey])}
-                                />
-                      ))}
-                        </Accordion>
-                </div>
-
-                    <div className="flex justify-end pt-4">
-                      <Button onClick={handleCreateRole} disabled={!newRoleName.trim()} className="bg-gray-900 hover:bg-gray-800 text-white">
-                        <Plus className="mr-2 h-4 w-4" /> Create Role
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="history" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Role History</CardTitle>
-                <CardDescription>Track changes to roles and permissions</CardDescription>
-              </CardHeader>
-              <CardContent>
-                 {roleHistory.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Role Name</TableHead>
-                        <TableHead>Action</TableHead>
-                        <TableHead>Details</TableHead>
-                        <TableHead>Performed By</TableHead>
-                        <TableHead>Date</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {roleHistory.map(entry => (
-                        <TableRow key={entry.id}>
-                          <TableCell><Badge variant="outline">{entry.roleName}</Badge></TableCell>
-                          <TableCell>
-                            <Badge variant={entry.action === 'created' ? 'default' : 'destructive'} className="capitalize">
-                              {entry.action}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-sm text-gray-600">
-                            {entry.action === 'created' && `Role "${entry.roleName}" was created.`}
-                            {entry.action === 'deleted' && `Role "${entry.roleName}" was deleted.`}
-                            {entry.action === 'updated' && `Role "${entry.roleName}" was updated.`}
-                          </TableCell>
-                          <TableCell>{entry.user}</TableCell>
-                          <TableCell>{new Date(entry.timestamp).toLocaleString()}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                 ) : (
-                  <p className="text-gray-500">No history to display yet. Create or delete a role to see changes here.</p>
-                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+          {hasPermission('settings.role.create') && (
+            <TabsContent value="create" className="mt-6">
+              <CreateRoleForm
+                roleName={newRoleName}
+                roleDescription={newRoleDescription}
+                                    permissions={newRolePermissions}
+                templates={ROLE_TEMPLATES}
+                selectedTemplate={selectedTemplate}
+                permissionGroups={permissionGroups}
+                onRoleNameChange={setNewRoleName}
+                onRoleDescriptionChange={setNewRoleDescription}
+                                    onPermissionChange={handleNewRolePermissionChange}
+                onSelectAllPermissions={handleSelectAllModulePermissions}
+                onTemplateSelect={handleTemplateSelect}
+                onCreateRole={handleCreateRole}
+                areAllModulePermissionsSelected={areAllModulePermissionsSelected}
+                countAssignedPermissions={countAssignedPermissions}
+                countTotalPermissionsInGroup={countTotalPermissionsInGroup}
+              />
+            </TabsContent>
+          )}
 
         </Tabs>
-
-        {/* Delete Confirmation Dialog */}
-        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete Role</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to delete the role "{roleToDelete?.name}"? This action cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button variant="destructive" onClick={confirmDeleteRole}>
-                Delete
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Edit Role Dialog */}
-        <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-          <DialogContent className="max-w-4xl">
-            <DialogHeader>
-              <DialogTitle>Edit Role: {editingRole?.name || 'Unknown'}</DialogTitle>
-              <DialogDescription>
-                Modify the name, description, and permissions for the "{editingRole?.name || 'Unknown'}" role.
-                <span className="text-sm text-blue-600 ml-2">
-                  Changes are automatically saved to the backend.
-                </span>
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-4 max-h-[60vh] overflow-y-auto space-y-6">
-              {/* Role Name and Description Fields */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
-                <div className="space-y-2">
-                  <Label htmlFor="editRoleName" className="text-sm font-semibold">Role Name</Label>
-                  <Input
-                    id="editRoleName"
-                    value={editingRoleName}
-                    onChange={(e) => setEditingRoleName(e.target.value)}
-                    placeholder="Enter role name"
-                  />
-                                    </div>
-                <div className="space-y-2">
-                  <Label htmlFor="editRoleDescription" className="text-sm font-semibold">Role Description</Label>
-                  <Input
-                    id="editRoleDescription"
-                    value={editingRoleDescription}
-                    onChange={(e) => setEditingRoleDescription(e.target.value)}
-                    placeholder="Enter role description"
-                  />
-                              </div>
-              </div>
-              
-              {/* Permissions Content - Always show, no loading state */}
-              {editingRolePermissions && (
-                 <Accordion type="multiple" className="w-full mt-2 space-y-3">
-                    {Object.entries(permissionGroups).map(([groupKey, group]) => (
-                        <MemoizedPermissionGroup
-                          key={groupKey}
-                          groupKey={groupKey}
-                          group={group}
+        <DeleteRoleDialog
+          isOpen={isDeleteDialogOpen}
+          onOpenChange={setIsDeleteDialogOpen}
+          role={roleToDelete}
+          onConfirm={confirmDeleteRole}
+        />
+        <EditRoleDialog
+          isOpen={isEditModalOpen}
+          onOpenChange={setIsEditModalOpen}
+          role={editingRole}
+          roleName={editingRoleName}
+          roleDescription={editingRoleDescription}
                           permissions={editingRolePermissions}
+          permissionGroups={permissionGroups}
+          onRoleNameChange={setEditingRoleName}
+          onRoleDescriptionChange={setEditingRoleDescription}
                           onPermissionChange={handleEditRolePermissionChange}
-                          onSelectAll={handleSelectAllEditingModulePermissions}
-                          areAllSelected={areAllEditingModulePermissionsSelected(groupKey)}
-                          assignedCount={countAssignedPermissions((editingRolePermissions as any)?.[groupKey])}
-                          totalCount={countTotalPermissionsInGroup((editingRolePermissions as any)?.[groupKey])}
-                          isEditing={true}
-                        />
-                    ))}
-                </Accordion>
-              )}
-                  </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => {
+          onSelectAllPermissions={handleSelectAllEditingModulePermissions}
+          areAllModulePermissionsSelected={areAllEditingModulePermissionsSelected}
+          countAssignedPermissions={countAssignedPermissions}
+          countTotalPermissionsInGroup={countTotalPermissionsInGroup}
+          onSave={handleUpdateRole}
+          onCancel={() => {
                 setIsEditModalOpen(false);
                 setEditingRole(null);
                 setEditingRolePermissions(null);
                 setEditingRoleName('');
                 setEditingRoleDescription('');
-              }}>
-                  Cancel
-                </Button>
-              <Button onClick={handleUpdateRole} disabled={!editingRolePermissions}>
-                Save Changes
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-        {/* Assign User Dialog */}
-        <Dialog open={isAssignUserDialogOpen} onOpenChange={setIsAssignUserDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Assign Role: {roleToAssignUser?.name}</DialogTitle>
-              <DialogDescription>
-                Select a user to assign the "{roleToAssignUser?.name}" role to.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-4">
-                <Input
-                placeholder="Search users..."
-                  value={userSearchTerm}
-                  onChange={(e) => setUserSearchTerm(e.target.value)}
-                className="mb-4"
-              />
-              <div className="space-y-2 max-h-[40vh] overflow-y-auto">
-                {users
-                  .filter(u => u.name.toLowerCase().includes(userSearchTerm.toLowerCase()) && u.role !== roleToAssignUser?.name)
-                  .map(u => (
-                    <div key={u.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-100">
-                        <div>
-                        <p className="font-medium">{u.name}</p>
-                        <p className="text-sm text-gray-500">{u.email}</p>
-                        </div>
-                      <Button size="sm" onClick={() => handleAssignRoleToUser(u.id)}>
-                              Assign
-                            </Button>
-                        </div>
-                  ))}
-                      </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* View Assigned Users Dialog */}
-          <Dialog open={!!viewUsersRole} onOpenChange={() => setViewUsersRole(null)}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Users with Role: {viewUsersRole?.name}</DialogTitle>
-                    <DialogDescription>
-                        Manage users assigned to the "{viewUsersRole?.name}" role.
-                    </DialogDescription>
-              </DialogHeader>
-                <div className="py-4 space-y-4">
-                    <div className="space-y-2 max-h-[40vh] overflow-y-auto">
-                        {users
-                            .filter(u => u.role === viewUsersRole?.name)
-                            .map(u => (
-                                <div key={u.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-100">
-                            <div>
-                                        <p className="font-medium">{u.name}</p>
-                                        <p className="text-sm text-gray-500">{u.email}</p>
-                            </div>
-                                    <Button size="sm" variant="outline" onClick={() => handleUnassignUser(u.id)}>
-                              Unassign
-                            </Button>
-                          </div>
-                        ))}
-                        {users.filter(u => u.role === viewUsersRole?.name).length === 0 && (
-                            <p className="text-center text-gray-500 py-4">No users are assigned to this role.</p>
-                        )}
-                      </div>
-                    {users.filter(u => u.role === viewUsersRole?.name).length > 0 && (
-                      <DialogFooter className="!justify-between mt-4">
-                          <Button variant="outline" onClick={() => setViewUsersRole(null)}>Close</Button>
-                          <Button variant="destructive" onClick={handleUnassignAllUsers}>
-                              <X className="mr-2 h-4 w-4" /> Unassign All
-                    </Button>
-                      </DialogFooter>
-                )}
-              </div>
-            </DialogContent>
-          </Dialog>
-
+          }}
+        />
+        <AssignUserDialog
+          isOpen={isAssignUserDialogOpen}
+          onOpenChange={setIsAssignUserDialogOpen}
+          role={roleToAssignUser}
+          users={apiUsers}
+          userSearchTerm={userSearchTerm}
+          onUserSearchChange={setUserSearchTerm}
+          onAssignUser={handleAssignAndRefresh}
+          onUnassignUser={handleUnassignAndRefresh}
+          isLoading={apiUsersLoading}
+          error={apiUsersError}
+          isProcessing={apiUsersLoading}
+        />
+        <ViewUsersDialog
+          isOpen={!!viewUsersRole}
+          onOpenChange={() => setViewUsersRole(null)}
+          role={viewUsersRole}
+          users={users.map(u => ({
+            id: u.id,
+            name: u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email || 'Unknown User',
+            email: u.email,
+            role: u.role
+          }))}
+          onUnassignUser={handleUnassignUser}
+          onUnassignAllUsers={handleUnassignAllUsers}
+          isProcessing={apiUsersLoading}
+        />
       </div>
     </PermissionGuard>
   );

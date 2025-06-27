@@ -5,6 +5,7 @@ import { authService } from '../services/auth.service';
 import { permissionService, UserPermissions } from '../services/permission.service';
 import { roleService } from '../services/role.service';
 import { Role } from '../types/models';
+import { Users, UserPlus, LayoutDashboard, Building2, Package, Wallet, Settings, Briefcase } from 'lucide-react';
 
 interface User {
   id: string;
@@ -31,6 +32,7 @@ interface AuthContextType {
   updateUserPermissions: (permissions: UserPermissions) => void;
   refreshUserPermissions: () => Promise<void>;
   refreshRoles: () => Promise<void>;
+  refreshUsers: () => Promise<void>;
   users: MockUser[];
   roles: Role[];
   userRoles: Record<string, string>;
@@ -52,7 +54,6 @@ export const PERMISSIONS = {
   EMPLOYEES_DELETE: 'EMPLOYEES_DELETE',
   
   DEPARTMENT_MANAGE: 'DEPARTMENT_MANAGE',
- 
   
   // Hiring
   CANDIDATE_VIEW: 'CANDIDATE_VIEW',
@@ -65,8 +66,6 @@ export const PERMISSIONS = {
   JOB_DELETE: 'JOB_DELETE',
   JOB_POST: 'JOB_POST',
   
- 
-  
   // Settings
   USER_VIEW: 'USER_VIEW',
   USER_CREATE: 'USER_CREATE',
@@ -74,8 +73,6 @@ export const PERMISSIONS = {
   USER_DELETE: 'USER_DELETE',
   
   ROLE_MANAGE: 'ROLE_MANAGE',
-  
- 
   
   // System
   SYSTEM_ADMIN: 'SYSTEM_ADMIN',
@@ -151,26 +148,20 @@ export const AUTH_ROLE_PERMISSIONS: Record<string, string[]> = {
 
 export interface MockUser {
   id: string;
+  _id?: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
   password?: string;
-  role: string;
+  role?: string;
+  roles?: string[];
   permissions?: string[];
+  [key: string]: any; // Allow additional properties from API
 }
 
 export const initialMockUsers: MockUser[] = [
-  // Admin users with predefined roles
-  
-
-  // Users without assigned roles (can be assigned later)
-  { id: 'u1', name: 'John Doe', email: 'john@example.com', password: 'password', role: '' },
-  { id: 'u2', name: 'Jane Smith', email: 'jane@example.com', password: 'password', role: '' },
-  { id: 'u3', name: 'Mike Johnson', email: 'mike@example.com', password: 'password', role: '' },
-  { id: 'u4', name: 'Sarah Wilson', email: 'sarah@example.com', password: 'password', role: '' },
-  { id: 'u5', name: 'David Brown', email: 'david@example.com', password: 'password', role: '' },
-  { id: 'u6', name: 'Emily Davis', email: 'emily@example.com', password: 'password', role: '' },
-  { id: 'u7', name: 'Robert Taylor', email: 'robert@example.com', password: 'password', role: '' },
-  { id: 'u8', name: 'Lisa Anderson', email: 'lisa@example.com', password: 'password', role: '' },
+  // No mock users - use only real API data
 ];
 
 export const useAuth = () => {
@@ -251,28 +242,92 @@ const saveToStorage = (key: string, value: any) => {
   }
 };
 
+const ICONS: Record<string, React.ReactNode> = {
+  employee_management: <Users className="h-5 w-5" />,
+  hiring: <UserPlus className="h-5 w-5" />,
+  projects: <Briefcase className="h-5 w-5" />,
+  sales: <Building2 className="h-5 w-5" />,
+  assets: <Package className="h-5 w-5" />,
+  finance: <Wallet className="h-5 w-5" />,
+  settings: <Settings className="h-5 w-5" />,
+  dashboard: <LayoutDashboard className="h-5 w-5" />,
+  // ...add more as needed
+};
+
+const MODULE_ROUTES: Record<string, { title: string, href: string, subRoutes?: Record<string, { title: string, href: string }> }> = {
+  employee_management: {
+    title: "Employee Management",
+    href: "/employees",
+    subRoutes: {
+      employees: { title: "All Employees", href: "/employees" },
+      department: { title: "Departments", href: "/employees/departments" },
+      // ...add more submodules as needed
+    }
+  },
+  hiring: {
+    title: "Hiring",
+    href: "/hiring",
+    subRoutes: {
+      job: { title: "Job Postings", href: "/hiring/jobs" },
+      candidate: { title: "Candidates", href: "/hiring/candidates" },
+      // ...add more submodules as needed
+    }
+  },
+  // ...add more modules as needed
+};
+
+function getSidebarItemsFromPermissions(permissions: UserPermissions) {
+  const items = [];
+  for (const moduleKey in permissions) {
+    const modulePerm = (permissions as any)[moduleKey];
+    const moduleRoute = MODULE_ROUTES[moduleKey];
+    if (!moduleRoute) continue;
+
+    // Check if any submodule has view permission
+    const subItems = [];
+    for (const subKey in modulePerm) {
+      const subPerm = modulePerm[subKey];
+      if (subPerm.view) {
+        const subRoute = moduleRoute.subRoutes?.[subKey];
+        if (subRoute) {
+          subItems.push({
+            title: subRoute.title,
+            href: subRoute.href,
+            module: moduleKey,
+            subModule: subKey,
+          });
+        }
+      }
+    }
+    if (subItems.length > 0) {
+      items.push({
+        title: moduleRoute.title,
+        icon: ICONS[moduleKey] || <LayoutDashboard className="h-5 w-5" />,
+        href: moduleRoute.href,
+        module: moduleKey,
+        subItems,
+      });
+    }
+  }
+  return items;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [user, setUser] = useState<User | null>(null);
-  const [users, setUsers] = useState<MockUser[]>(initialMockUsers);
+  const [users, setUsers] = useState<MockUser[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [userRoles, setUserRoles] = useState<Record<string, string>>({});
   const { toast } = useToast();
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check for a logged-in user and validate session on component mount
-    const initializeAuth = async () => {
+    // Simulate checking for a logged-in user on component mount
     const storedUser = localStorage.getItem('currentUser');
     if (storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser);
-          
-          // Validate current session (check tokens and refresh if needed)
-          const isValidSession = await authService.validateSession();
-          
-          if (isValidSession) {
-            // Session is valid, set user
+        // Ensure permissions is a valid object
         const userWithPermissions = {
           ...parsedUser,
           permissions: typeof parsedUser.permissions === 'object' && parsedUser.permissions !== null 
@@ -281,37 +336,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
         setUser(userWithPermissions);
         setIsAuthenticated(true);
-            console.log('Session validated successfully');
-          } else {
-            // Session is invalid, clear stored data
-            console.log('Session validation failed, clearing stored data');
-            localStorage.removeItem('currentUser');
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('refreshToken');
-            setUser(null);
-            setIsAuthenticated(false);
-            
-            toast({
-              title: "🔒 Session Expired",
-              description: "Your session has expired. Please log in again.",
-              variant: "destructive",
-              duration: 5000,
-              className: "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200 text-black",
-            });
-          }
       } catch (error) {
-          console.error('Error during session initialization:', error);
+        console.error('Error parsing stored user:', error);
         // Clear invalid data
         localStorage.removeItem('currentUser');
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-          setUser(null);
-          setIsAuthenticated(false);
       }
     }
-    };
-    
-    initializeAuth();
   }, []);
 
   // Fetch roles from backend on mount
@@ -376,6 +406,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
     fetchRoles();
+    // Load real users from API if authenticated
+    if (isAuthenticated) {
+      refreshUsers();
+    }
   }, [isAuthenticated, toast]);
 
   // Function to refresh roles from backend
@@ -675,9 +709,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const registeredUser: User = {
           id: newUser.id,
           email: newUser.email,
-          firstName: newUser.name.split(' ')[0],
-          lastName: newUser.name.split(' ')[1],
-          role: newUser.role,
+          firstName: newUser.name?.split(' ')[0] || 'User',
+          lastName: newUser.name?.split(' ')[1] || '',
+          role: newUser.role || 'EMPLOYEE',
           permissions: permissionsObject,
         };
 
@@ -1205,6 +1239,86 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const refreshUsers = async () => {
+    try {
+      console.log('🔄 Refreshing users from AuthContext...');
+      
+      // 🔥 FIX: Use employee service instead of auth service to get users with role assignments
+      const { getEmployees } = await import('../services/employee.service');
+      const employeesData = await getEmployees();
+      console.log('📥 Raw employees response:', employeesData);
+      
+      // Transform employee data to user format
+      const usersArray = Array.isArray(employeesData) ? employeesData : [];
+      console.log('✅ Employees processed:', usersArray?.length || 0, 'users');
+      console.log('📋 Sample employee from AuthContext:', usersArray?.[0]);
+      
+      // Transform employees to MockUser format for compatibility
+      const processedUsers = usersArray.map((emp: any) => {
+        // Get user info from nested user object or directly from employee
+        const user = emp.user || emp;
+        const name = user.name || 
+                    `${user.firstName || ''} ${user.lastName || ''}`.trim() || 
+                    user.email || 
+                    'Unknown User';
+        
+        // Get role information - check multiple sources
+        let role = '';
+        let roles: string[] = [];
+        
+        // Check user.roles array first (most reliable for role assignments)
+        if (user.roles && Array.isArray(user.roles)) {
+          roles = user.roles.map((r: any) => typeof r === 'object' ? r.name || r._id || r.id : r).filter(Boolean);
+          role = roles[0] || ''; // Use first role as primary role
+        }
+        
+        // Fallback to emp.role if no user roles
+        if (!role && emp.role) {
+          role = typeof emp.role === 'object' ? emp.role.name || emp.role._id || emp.role.id : emp.role;
+        }
+        
+        // Fallback to user.role if still no role
+        if (!role && user.role) {
+          role = typeof user.role === 'object' ? user.role.name || user.role._id || user.role.id : user.role;
+        }
+        
+        console.log(`👤 Processing user: ${name}, role: ${role}, roles: ${JSON.stringify(roles)}`);
+        
+        return {
+          id: user._id || user.id || emp._id || emp.id,
+          _id: user._id || emp._id,
+          name: name,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email || emp.email,
+          role: role,
+          roles: roles,
+          // Include any additional properties
+          ...user,
+          ...emp
+        };
+      });
+      
+      console.log('🔄 Processed users for AuthContext:', processedUsers.map(u => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        roles: u.roles
+      })));
+      
+      setUsers(processedUsers);
+    } catch (error) {
+      console.error('❌ Failed to refresh users:', error);
+      toast({
+        title: "⚠️ Users Refresh Failed",
+        description: "Failed to refresh users from the server.",
+        variant: "destructive",
+        duration: 5000,
+      });
+    }
+  };
+
   const value = {
     isAuthenticated,
     user,
@@ -1217,6 +1331,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     updateUserPermissions,
     refreshUserPermissions,
     refreshRoles,
+    refreshUsers,
     users,
     roles,
     userRoles,

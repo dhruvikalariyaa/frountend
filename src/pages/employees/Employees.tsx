@@ -81,6 +81,10 @@ export default function Employees() {
   const [editingEmployeeForm, setEditingEmployeeForm] = useState<EmployeeFormValues | undefined>(undefined);
   const [totalEmployees, setTotalEmployees] = useState(0);
 
+  // Departments and roles data for edit mode
+  const [departments, setDepartments] = useState<Array<{_id?: string, id?: string, name: string}>>([]);
+  const [roles, setRoles] = useState<Array<{_id?: string, id?: string, name: string}>>([]);
+
   // Helper function to map backend data to frontend format
   const mapBackendDataToFrontend = (employeesData: any[]): Employee[] => {
     return employeesData.map((emp: any) => {
@@ -113,9 +117,35 @@ export default function Employees() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const employeesData = await getEmployees();
+        
+        // Fetch employees, departments, and roles in parallel
+        const [employeesData, deptResponse, roleResponse] = await Promise.all([
+          getEmployees(),
+          fetch('http://localhost:8000/api/v1/departments', {
+            headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
+          }),
+          fetch('http://localhost:8000/api/v1/roles', {
+            headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
+          })
+        ]);
+
+        // Process employees data
         const mappedEmployees: Employee[] = mapBackendDataToFrontend(employeesData);
         setAllEmployees(mappedEmployees);
+
+        // Process departments data
+        const deptData = await deptResponse.json();
+        const departments = deptData.data || (Array.isArray(deptData) ? deptData : []);
+        setDepartments(departments);
+
+        // Process roles data  
+        const roleData = await roleResponse.json();
+        const roles = roleData.data || (Array.isArray(roleData) ? roleData : []);
+        setRoles(roles);
+
+        console.log('Fetched departments:', departments);
+        console.log('Fetched roles:', roles);
+        
         setLoading(false);
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -404,7 +434,68 @@ export default function Employees() {
     if (!editingEmployee) return;
 
     try {
-      await updateEmployee(editingEmployee.id, data);
+      console.log('🚀 Edit submit called with:', data);
+      console.log('📧 Email in edit data:', data.email);
+      console.log('👤 Editing employee:', editingEmployee);
+      
+      // Convert department name to ID
+      const selectedDepartment = departments.find(dept => dept.name === data.department);
+      const departmentId = selectedDepartment ? (selectedDepartment._id || selectedDepartment.id) : '';
+
+      // Convert role name to ID (assuming single role for now)
+      const selectedRole = roles.find(role => role.name === (Array.isArray(data.roles) ? data.roles[0] : data.roles));
+      const roleIds = selectedRole ? [(selectedRole._id || selectedRole.id)] : [];
+      
+      // Transform the data to match API expectations exactly (same as add mode)
+      const { confirmPassword, ...dataWithoutConfirmPassword } = data;
+      
+      const apiData = {
+        firstName: dataWithoutConfirmPassword.firstName,
+        lastName: dataWithoutConfirmPassword.lastName,
+        email: dataWithoutConfirmPassword.email,
+        phone: dataWithoutConfirmPassword.phone || '',
+        employeeId: dataWithoutConfirmPassword.employeeId,
+        joiningDate: dataWithoutConfirmPassword.joiningDate instanceof Date 
+          ? dataWithoutConfirmPassword.joiningDate
+          : new Date(dataWithoutConfirmPassword.joiningDate),
+        salary: typeof dataWithoutConfirmPassword.salary === 'string' ? Number(dataWithoutConfirmPassword.salary) : dataWithoutConfirmPassword.salary,
+        department: dataWithoutConfirmPassword.department, // Keep department name for type compatibility
+        roles: roleIds.filter(Boolean) as string[], // Use converted role IDs
+        departmentId: departmentId || '', // Use converted department ID
+        address: dataWithoutConfirmPassword.address || {
+          street: '',
+          city: '',
+          state: '',
+          country: '',
+          postalCode: ''
+        },
+        emergencyContact: dataWithoutConfirmPassword.emergencyContact || {
+          name: '',
+          relationship: '',
+          phone: ''
+        },
+        bankDetails: dataWithoutConfirmPassword.bankDetails || {
+          accountNumber: '',
+          bankName: '',
+          ifscCode: ''
+        },
+      };
+      
+      // Only include password if it's provided
+      if (dataWithoutConfirmPassword.password && dataWithoutConfirmPassword.password.trim() !== '') {
+        (apiData as any).password = dataWithoutConfirmPassword.password;
+      }
+      
+      console.log('📤 Sending edit API data:', apiData);
+      console.log('📧 Final email in API data:', apiData.email);
+      console.log('🏢 Department conversion:', data.department, '->', departmentId);
+      console.log('👤 Role conversion:', data.roles, '->', roleIds);
+      console.log('🔗 API endpoint:', `/employees/${editingEmployee.id}`);
+      
+      await updateEmployee(editingEmployee.id, apiData as any);
+      
+      // Close dialog first
+      setIsEditDialogOpen(false);
       
       // Refresh data
       const employeesData = await getEmployees();
@@ -419,10 +510,25 @@ export default function Employees() {
         description: "Employee updated successfully",
         duration: 1000,
       });
-    } catch (error) {
+    } catch (error: any) {
+      console.error('❌ Error updating employee:', error);
+      console.error('📧 Error details for email update:', {
+        message: error?.message,
+        response: error?.response?.data,
+        status: error?.response?.status,
+        statusText: error?.response?.statusText
+      });
+      
+      let errorMessage = error?.message || "Failed to update employee";
+      
+      // Handle specific email errors
+      if (errorMessage.toLowerCase().includes('email')) {
+        errorMessage = 'Email update failed. The email address may already be in use.';
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to update employee",
+        description: errorMessage,
         variant: "destructive",
         duration: 1000,
       });

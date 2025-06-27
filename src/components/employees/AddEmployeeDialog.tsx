@@ -120,6 +120,104 @@ interface EmployeeFormProps {
   isEdit?: boolean;
 }
 
+// Helper function to normalize employee data
+const normalizeEmployeeData = (data: any): Partial<EmployeeFormValues> => {
+  if (!data) return {};
+
+  console.log('🔄 Normalizing employee data:', data);
+
+  // Extract user data if it exists
+  const user = data.user || {};
+  
+  // Extract email with detailed logging
+  let email = '';
+  if (user.email) {
+    email = user.email;
+    console.log('📧 Email found in user.email:', email);
+  } else if (data.email) {
+    email = data.email;
+    console.log('📧 Email found in data.email:', email);
+  } else {
+    console.log('📧 No email found in data');
+  }
+  
+  // Extract department data
+  const department = data.department;
+  let departmentName = '';
+  if (typeof department === 'object' && department !== null) {
+    departmentName = department.name || department.title || '';
+  } else if (typeof department === 'string') {
+    departmentName = department;
+  }
+
+  // Extract roles data
+  let roles: string[] = [];
+  if (user.roles && Array.isArray(user.roles)) {
+    roles = user.roles.map((role: any) => 
+      typeof role === 'object' ? (role.name || role.title || '') : role
+    ).filter(Boolean);
+  } else if (data.role) {
+    const role = typeof data.role === 'object' ? (data.role.name || data.role.title || '') : data.role;
+    if (role) roles = [role];
+  }
+
+  // Normalize address
+  const address = data.address || {};
+  const normalizedAddress = {
+    street: address.street || '',
+    city: address.city || '',
+    state: address.state || '',
+    country: address.country || '',
+    postalCode: address.postalCode || '',
+  };
+
+  // Normalize emergency contact
+  const emergencyContact = data.emergencyContact || {};
+  const normalizedEmergencyContact = {
+    name: emergencyContact.name || '',
+    relationship: emergencyContact.relationship || '',
+    phone: emergencyContact.phone || '',
+  };
+
+  // Normalize bank details
+  const bankDetails = data.bankDetails || {};
+  const normalizedBankDetails = {
+    accountNumber: bankDetails.accountNumber || '',
+    bankName: bankDetails.bankName || '',
+    ifscCode: bankDetails.ifscCode || '',
+  };
+
+  // Parse joining date
+  let joiningDate = new Date();
+  if (data.joinDate) {
+    joiningDate = new Date(data.joinDate);
+  } else if (data.joiningDate) {
+    joiningDate = new Date(data.joiningDate);
+  }
+
+  const normalized = {
+    firstName: user.firstName || data.firstName || '',
+    lastName: user.lastName || data.lastName || '',
+    email: email,
+    phone: user.phone || data.phone || '',
+    department: departmentName,
+    roles: roles,
+    employeeId: data.employeeId || '',
+    joiningDate: joiningDate,
+    salary: data.salary || 1000,
+    address: normalizedAddress,
+    emergencyContact: normalizedEmergencyContact,
+    bankDetails: normalizedBankDetails,
+    password: '',
+    confirmPassword: '',
+    departmentId: typeof data.department === 'object' ? (data.department._id || data.department.id || '') : '',
+  };
+
+  console.log('✅ Normalized data:', normalized);
+  console.log('📧 Final normalized email:', normalized.email);
+  return normalized;
+};
+
 // EmployeeForm component
 function EmployeeForm({ initialData, onSubmit, onCancel, isEdit = false }: EmployeeFormProps) {
   // State for departments and roles data
@@ -173,25 +271,9 @@ function EmployeeForm({ initialData, onSubmit, onCancel, isEdit = false }: Emplo
     }
   }, [isEdit]);
 
-  // Normalize initialData to extract nested user and department fields if present
-  const normalizedInitialData = { ...initialData };
-  if (initialData && typeof initialData === 'object') {
-    const user = (initialData as any).user;
-    if (user) {
-      if (!('firstName' in normalizedInitialData) && user.firstName) {
-        (normalizedInitialData as any).firstName = user.firstName;
-      }
-      if (!('lastName' in normalizedInitialData) && user.lastName) {
-        (normalizedInitialData as any).lastName = user.lastName;
-      }
-    }
-    const department = (initialData as any).department;
-    if (department && typeof department === 'object') {
-      if (department.name) {
-        (normalizedInitialData as any).department = department.name;
-      }
-    }
-  }
+  // Normalize and prepare initial data
+  const normalizedInitialData = normalizeEmployeeData(initialData);
+  
   const form = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeSchema),
     defaultValues: {
@@ -228,6 +310,19 @@ function EmployeeForm({ initialData, onSubmit, onCancel, isEdit = false }: Emplo
       ...normalizedInitialData,
     },
   });
+
+  // Reset form when initialData changes (important for edit mode)
+  useEffect(() => {
+    if (initialData && isEdit) {
+      console.log('🔄 Resetting form with new initial data for edit mode');
+      const normalized = normalizeEmployeeData(initialData);
+      form.reset({
+        ...form.getValues(),
+        ...normalized,
+        isEdit: true,
+      });
+    }
+  }, [initialData, isEdit, form]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -378,50 +473,87 @@ function EmployeeForm({ initialData, onSubmit, onCancel, isEdit = false }: Emplo
     }
   };
 
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(
-        async (data) => { 
-          console.log('✅ Form validation passed, submitting data:', data); 
-          setIsSubmitting(true);
-          try {
-            // Convert department name to ID
-            const selectedDepartment = departments.find(dept => dept.name === data.department);
-            const departmentId = selectedDepartment ? (selectedDepartment._id || selectedDepartment.id) : '';
+  const handleFormSubmit = async (data: EmployeeFormValues) => {
+    console.log('✅ Form validation passed, submitting data:', data); 
+    console.log('📧 Email in submitted data:', data.email);
+    console.log('🔄 Is edit mode:', isEdit);
+    
+    setIsSubmitting(true);
+    
+    try {
+      // Convert department name to ID
+      const selectedDepartment = departments.find(dept => dept.name === data.department);
+      const departmentId = selectedDepartment ? (selectedDepartment._id || selectedDepartment.id) : '';
 
-            // Convert role name to ID (assuming single role for now)
-            const selectedRole = roles.find(role => role.name === (Array.isArray(data.roles) ? data.roles[0] : data.roles));
-            const roleIds = selectedRole ? [(selectedRole._id || selectedRole.id)] : [];
+      // Convert role name to ID (assuming single role for now)
+      const selectedRole = roles.find(role => role.name === (Array.isArray(data.roles) ? data.roles[0] : data.roles));
+      const roleIds = selectedRole ? [(selectedRole._id || selectedRole.id)] : [];
 
-            // Exclude confirmPassword from data
-            const { confirmPassword, ...dataWithoutConfirmPassword } = data;
+      // Exclude confirmPassword from data
+      const { confirmPassword, ...dataWithoutConfirmPassword } = data;
 
-            // Create data with converted IDs
-            const dataWithIds = {
-              ...dataWithoutConfirmPassword,
-              departmentId: departmentId || '', // Ensure it's always a string
-              roles: roleIds.filter(Boolean) as string[] // Ensure it's string array
-            };
+      // Create data with converted IDs
+      const dataWithIds = {
+        ...dataWithoutConfirmPassword,
+        departmentId: departmentId || '', // Ensure it's always a string
+        roles: roleIds.filter(Boolean) as string[] // Ensure it's string array
+      };
 
-            // Remove password from data if it's empty in edit mode
-            if (isEdit && !dataWithIds.password) {
-              delete dataWithIds.password;
-            }
+      // Remove password from data if it's empty in edit mode
+      if (isEdit && (!dataWithIds.password || dataWithIds.password.trim() === '')) {
+        delete dataWithIds.password;
+      }
 
-            await onSubmit(dataWithIds); 
-          } finally {
-            setIsSubmitting(false);
-          }
-        },
-        (errors) => {
-          console.error('❌ Form validation failed:', errors);
+      console.log('📤 Final data being submitted:', dataWithIds);
+      console.log('📧 Final email in submission:', dataWithIds.email);
+      console.log('🆔 Department ID conversion:', data.department, '->', departmentId);
+      console.log('👤 Role ID conversion:', data.roles, '->', roleIds);
+      
+      await onSubmit(dataWithIds); 
+    } catch (error) {
+      console.error('❌ Error in form submission:', error);
+      
+      // Check if it's an email-specific error
+      if (error && typeof error === 'object' && 'message' in error) {
+        const errorMessage = (error as any).message?.toLowerCase() || '';
+        if (errorMessage.includes('email')) {
+          console.error('📧 Email-specific error detected:', error);
           toast({
-            title: 'Form validation failed',
-            description: 'Please check all required fields',
+            title: 'Email Update Failed',
+            description: 'The email address may already be in use or invalid. Please try a different email.',
             variant: 'destructive'
           });
+          return; // Don't re-throw, we handled it
         }
-      )} className="space-y-6 p-1">
+      }
+      
+      // Don't show error here, let parent handle it
+      throw error;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleFormError = (errors: any) => {
+    console.error('❌ Form validation failed:', errors);
+    
+    // Find the first error and show specific feedback
+    const errorFields = Object.keys(errors);
+    if (errorFields.length > 0) {
+      const firstError = errors[errorFields[0]];
+      const errorMessage = firstError?.message || 'Please check all required fields';
+      
+      toast({
+        title: 'Form validation failed',
+        description: errorMessage,
+        variant: 'destructive'
+      });
+    }
+  };
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(handleFormSubmit, handleFormError)} className="space-y-6 p-1">
         {/* Personal Information Section */}
         <div className="space-y-4 pb-2">
           <h3 className="text-lg font-semibold">Personal Information</h3>
@@ -459,9 +591,38 @@ function EmployeeForm({ initialData, onSubmit, onCancel, isEdit = false }: Emplo
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input type="email" placeholder="john.doe@example.com" {...field} />
+                    <Input 
+                      type="email" 
+                      placeholder="john.doe@example.com" 
+                      {...field}
+                      onChange={(e) => {
+                        console.log('📧 Email field changed:', e.target.value);
+                        console.log('📧 Previous email value:', field.value);
+                        console.log('📧 Is edit mode:', isEdit);
+                        field.onChange(e.target.value);
+                        
+                        // Trigger form validation immediately
+                        setTimeout(() => {
+                          const formErrors = form.formState.errors;
+                          if (formErrors.email) {
+                            console.log('❌ Email validation error:', formErrors.email.message);
+                          } else {
+                            console.log('✅ Email validation passed');
+                          }
+                        }, 0);
+                      }}
+                      onBlur={(e) => {
+                        console.log('📧 Email field blurred with value:', e.target.value);
+                        field.onBlur();
+                      }}
+                    />
                   </FormControl>
                   <FormMessage />
+                  {isEdit && (
+                    <p className="text-xs text-blue-600 mt-1">
+                      Current: {field.value || 'No email set'}
+                    </p>
+                  )}
                 </FormItem>
               )}
             />
@@ -976,7 +1137,7 @@ function EmployeeForm({ initialData, onSubmit, onCancel, isEdit = false }: Emplo
             Cancel
           </Button>
           <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Adding Employee...' : (initialData ? 'Update Employee' : 'Add Employee')}
+            {isSubmitting ? (isEdit ? 'Updating Employee...' : 'Adding Employee...') : (isEdit ? 'Update Employee' : 'Add Employee')}
           </Button>
         </div>
       </form>
@@ -1022,7 +1183,6 @@ export function AddEmployeeDialog({
         lastName: dataWithoutConfirmPassword.lastName,
         email: dataWithoutConfirmPassword.email,
         phone: dataWithoutConfirmPassword.phone || '',
-        password: dataWithoutConfirmPassword.password,
         employeeId: dataWithoutConfirmPassword.employeeId,
         joiningDate: dataWithoutConfirmPassword.joiningDate instanceof Date 
           ? dataWithoutConfirmPassword.joiningDate.toISOString().split('T')[0]
@@ -1048,11 +1208,16 @@ export function AddEmployeeDialog({
           ifscCode: ''
         },
       };
+
+      // Only include password if it's provided (for both add and edit)
+      if (dataWithoutConfirmPassword.password && dataWithoutConfirmPassword.password.trim() !== '') {
+        (apiData as any).password = dataWithoutConfirmPassword.password;
+      }
       
       console.log('📤 Sending API data:', apiData);
       
       if (mode === 'add') {
-        // Make direct API call instead of using the service
+        // Make direct API call for add mode
         const response = await fetch('http://127.0.0.1:8000/api/v1/employees', {
           method: 'POST',
           headers: {
@@ -1084,11 +1249,12 @@ export function AddEmployeeDialog({
           }
         }
       } else if (onEmployeeEdit) {
-        // For edit mode, use the callback
+        // For edit mode, use the callback with the transformed data
         await onEmployeeEdit(data);
+        setDialogOpen(false);
       }
     } catch (error: any) {
-      console.error('❌ Error adding employee:', error);
+      console.error('❌ Error submitting employee:', error);
       console.error('Error details:', {
         message: error?.message,
         response: error?.response?.data,
@@ -1097,10 +1263,22 @@ export function AddEmployeeDialog({
         requestData: error?.config?.data
       });
       
-      const errorMessage = error?.message || 'An error occurred while adding employee';
+      let errorMessage = 'An error occurred while processing employee';
+      
+      // Extract specific error messages
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      
+      // Handle specific email errors
+      if (errorMessage.toLowerCase().includes('email')) {
+        errorMessage = 'Email update failed. Please check if the email is already in use.';
+      }
       
       toast({ 
-        title: 'Failed to add employee', 
+        title: mode === 'add' ? 'Failed to add employee' : 'Failed to update employee', 
         description: errorMessage, 
         variant: 'destructive' 
       });
